@@ -1,0 +1,17 @@
+{
+  "name": "vite-js-template",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cls && vite dev",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "workspace:*"
+  },
+  "dependencies": {
+    "lodash-es": "^4.17.21"
+  }
+}

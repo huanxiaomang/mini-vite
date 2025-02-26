@@ -1,0 +1,17 @@
+{
+  "name": "vite",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "bin": {
+    "vite": "./bin/cli"
+},
+  "scripts": {
+    "dev": "tsup --watch --onSuccess \"pnpm load\"",
+    "build": "tsup --minify && pnpm load",
+    "load": "npm link"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

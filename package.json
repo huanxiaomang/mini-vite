@@ -1,0 +1,44 @@
+{
+  "name": "@vite/monorepo",
+  "private": "true",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "huanxiaomang",
+  "license": "ISC",
+  "engines": {
+    "node": ">= 18"
+  },
+  "dependencies": {
+    "@vite/shared": "workspace:*",
+    "cac": "^6.7.14",
+    "chokidar": "^4.0.3",
+    "commander": "^13.1.0",
+    "es-module-lexer": "^1.6.0",
+    "esbuild": "^0.25.0",
+    "magic-string": "^0.30.17",
+    "picocolors": "^1.1.1",
+    "rollup": "^4.34.8",
+    "sirv": "^3.0.1",
+    "vite": "workspace:*",
+    "vite-plugin-vue": "workspace:*",
+    "ws": "^8.18.1"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*.{vue,js,ts,jsx,tsx,md,json}": "eslint --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "@types/ws": "^8.5.14",
+    "eslint": "8.57.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3"
+  }
+}

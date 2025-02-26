@@ -1,0 +1,12 @@
+{
+  "name": "@vite/shared",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsup --minify"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
