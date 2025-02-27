@@ -1,9 +1,9 @@
-import { log } from '@vite/shared';
-import { depCache, saveDepCache } from './cache';
-import { join, resolve } from 'node:path';
-import { CACHE_DIR, ROOT } from './constant';
+import { join, resolve } from "node:path";
+import { log } from "@vite/shared";
 import esbuild from "esbuild";
-import picocolors from 'picocolors';
+import picocolors from "picocolors";
+import { depCache, saveDepCache } from "./cache";
+import { CACHE_DIR, ROOT } from "./constant";
 
 export async function preBundleDependency(pkgName: string): Promise<string> {
   const cacheKey = pkgName;

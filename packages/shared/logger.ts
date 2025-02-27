@@ -89,28 +89,28 @@ function createLogger(minLevel: LogLevel = "info"): Logger {
 
   // 核心日志方法
   const logger = Object.assign(
-    (message: string, ...args: any[]) => {
+    (message: any, ...args: any[]) => {
       if (shouldLog("info")) {
         console.log(levelColors.info(`[INFO] ${message}`), ...args);
       }
     },
     {
-      debug: (message: string, ...args: any[]) => {
+      debug: (message: any, ...args: any[]) => {
         if (shouldLog("debug")) {
           console.log(levelColors.debug(`[DEBUG] ${message}`), ...args);
         }
       },
-      info: (message: string, ...args: any[]) => {
+      info: (message: any, ...args: any[]) => {
         if (shouldLog("info")) {
           console.log(levelColors.info(`[INFO] ${message}`), ...args);
         }
       },
-      warn: (message: string, ...args: any[]) => {
+      warn: (message: any, ...args: any[]) => {
         if (shouldLog("warn")) {
           console.warn(levelColors.warn(`[WARN] ${message}`), ...args);
         }
       },
-      error: (message: string, ...args: any[]) => {
+      error: (message: any, ...args: any[]) => {
         if (shouldLog("error")) {
           console.error(levelColors.error(`[ERROR] ${message}`), ...args);
         }

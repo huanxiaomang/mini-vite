@@ -1,10 +1,26 @@
-import { WebSocketServer } from "ws";
 import { Server } from "node:http";
-import { watch } from "chokidar";
 import { extname, relative } from "node:path";
-import { ignoredHMRPath, ROOT } from "./constant";
+import { watch } from "chokidar";
+import { WebSocketServer } from "ws";
 import picocolors from "picocolors";
 import { log } from "@vite/shared";
+import { ROOT, ignoredHMRPath } from "./constant";
+
+export const hmrClientScript = (port: number) => `
+    <script type="module">
+      const ws = new WebSocket('ws://localhost:${port}');
+      ws.onmessage = ({ data }) => {
+        const payload = JSON.parse(data);
+        if (payload.type === 'update') {
+          import(\`\${payload.path}?t=\${Date.now()}\`).then(() => {
+            console.log('HMR: Updated ' + payload.path);
+          });
+        } else if (payload.type === 'full-reload') {
+          window.location.reload();
+        }
+      };
+    </script>
+  `;
 
 /**
  * 初始化 HMR（热模块替换）服务
@@ -25,9 +41,10 @@ export function setupHmr(server: Server): WebSocketServer {
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
-        const payload = ext === ".html"
-          ? { type: "full-reload", path: modulePath }
-          : { type: "update", path: modulePath };
+        const payload =
+          ext === ".html"
+            ? { type: "full-reload", path: modulePath }
+            : { type: "update", path: modulePath };
         client.send(JSON.stringify(payload));
       }
     });

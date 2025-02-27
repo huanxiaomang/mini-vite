@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-export const DEFAULT_PORT = 3000;
+export const DEFAULT_PORT = 4000;
 export const ROOT = process.cwd();
 export const OUT_DIR = join(ROOT, "dist");
 export const CACHE_DIR = join(ROOT, "node_modules", ".vite");

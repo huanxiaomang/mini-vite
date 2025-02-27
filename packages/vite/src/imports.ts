@@ -1,13 +1,16 @@
-import { log, normalize, normalizeImportPath } from '@vite/shared';
+import { dirname, extname, relative, resolve } from "node:path";
+import { log, normalize, normalizeImportPath } from "@vite/shared";
 import { init, parse } from "es-module-lexer";
 import MagicString from "magic-string";
-import { dirname, extname, relative, resolve } from 'node:path';
-import { checkSuffix } from './utils';
-import { ROOT } from './constant';
-import { preBundleDependency } from './prebundle';
-import { depCache } from './cache';
+import { checkSuffix } from "./utils";
+import { ROOT } from "./constant";
+import { preBundleDependency } from "./prebundle";
+import { depCache } from "./cache";
 
-export async function rewriteImports(code: string, filePath: string): Promise<string> {
+export async function rewriteImports(
+  code: string,
+  filePath: string
+): Promise<string> {
   await init;
   const [imports] = parse(code);
   const ms = new MagicString(code);
@@ -18,7 +21,8 @@ export async function rewriteImports(code: string, filePath: string): Promise<st
     if (!importPath) return;
 
     const ext = extname(importPath).toLowerCase();
-    const isStaticAsset = ext && ext !== ".js" && ext !== ".css";
+    const isStaticAsset =
+      ext && ext !== ".js" && ext !== ".css" && ext !== ".ts" && ext !== ".vue";
     let rewrittenPath: string | undefined;
 
     if (importPath.startsWith(".") || importPath.startsWith("/")) {

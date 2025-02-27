@@ -1,32 +1,25 @@
+import { IncomingMessage, ServerResponse, createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { extname, relative, resolve } from "node:path";
 import {
+  MIME_TYPES,
+  TEXT_EXTENSIONS,
   fileExists,
   getMimeType,
   log,
-  MIME_TYPES,
   normalizeImportPath,
-  TEXT_EXTENSIONS,
 } from "@vite/shared";
-import type { ViteContext } from "./type";
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { readFile, writeFile } from "node:fs/promises";
-import { join, extname, resolve, relative, posix, dirname } from "node:path";
-
-import {
-  DEFAULT_PORT,
-  PUBLIC_DIR,
-  ROOT,
-} from "./constant";
 import picocolors from "picocolors";
-import { loadDepCache } from './cache';
-import { hmrClientScript } from './inject';
-import { rewriteImports } from './imports';
-import { setupHmr } from './hmr';
 import serve from "sirv";
+import { loadDepCache } from "./cache";
+import { DEFAULT_PORT, PUBLIC_DIR, ROOT } from "./constant";
+import { setupHmr } from "./hmr";
+import { withSourceMap } from "./sourcemap";
+import type { ServerInstance, ViteContext } from "./type";
 
-/**
- * 启动开发服务器
- */
-export async function startDevServer(ctx: ViteContext): Promise<any> {
+export async function startDevServer(
+  ctx: ViteContext
+): Promise<ServerInstance> {
   log.debug("Starting dev server...");
   await loadDepCache();
 
@@ -39,8 +32,8 @@ export async function startDevServer(ctx: ViteContext): Promise<any> {
       log.debug(`Request: ${url}`);
 
       const isModuleRequest = url.includes("?import");
-
       let filePath: string;
+
       if (url === "/") {
         filePath = ctx.entry;
       } else {
@@ -51,6 +44,7 @@ export async function startDevServer(ctx: ViteContext): Promise<any> {
           filePath = resolve(ROOT, url.slice(1));
         }
       }
+
       filePath = filePath.split("?")[0];
       const ext = extname(filePath).toLowerCase();
       log.debug("Resolved filePath:", filePath, "ext:", ext);
@@ -62,46 +56,40 @@ export async function startDevServer(ctx: ViteContext): Promise<any> {
             ? await readFile(filePath, "utf-8")
             : await readFile(filePath);
 
-          let finalContent: string | Buffer = content;
-          let mimeType = getMimeType(ext);
+          const relativePath = filePath.startsWith(PUBLIC_DIR)
+            ? normalizeImportPath(relative(PUBLIC_DIR, filePath))
+            : normalizeImportPath(relative(ROOT, filePath));
 
-          if (ext === ".js" && typeof content === "string") {
-            finalContent = await rewriteImports(content, filePath);
-            mimeType = "application/javascript";
-          } else if (ext === ".css") {
-            const cssContent = content as string;
-            finalContent = `
-              const style = document.createElement('style');
-              style.textContent = ${JSON.stringify(cssContent)};
-              document.head.appendChild(style);
-              export default {};
-            `;
-            mimeType = "application/javascript";
-          } else if (ext === ".svg" && isModuleRequest) {
-            const relativePath = filePath.startsWith(PUBLIC_DIR)
-              ? normalizeImportPath(relative(PUBLIC_DIR, filePath))
-              : normalizeImportPath(relative(ROOT, filePath));
-            log.debug("Handling SVG:", { filePath, relativePath });
-            const svgContent = await readFile(filePath, "utf-8");
-            const encodedSvg = encodeURIComponent(svgContent.trim())
-              .replace(/'/g, "\\'")
-              .replace(/"/g, '\\"');
-            finalContent = `export default "data:image/svg+xml,${encodedSvg}";`;
-            mimeType = "application/javascript";
-          } else if (ext === ".png" && isModuleRequest) {
-            const relativePath = filePath.startsWith(PUBLIC_DIR)
-              ? normalizeImportPath(relative(PUBLIC_DIR, filePath))
-              : normalizeImportPath(relative(ROOT, filePath));
-            log.debug("Handling PNG:", { filePath, relativePath });
-            finalContent = `export default "${relativePath}";`;
-            mimeType = "application/javascript";
-          } else if (ext === ".html") {
-            finalContent = `${content}\n${hmrClientScript(port)}`;
-            mimeType = "text/html";
+          for (const plugin of ctx.plugins) {
+            if (plugin.transform) {
+              const result = await plugin.transform(content, filePath, {
+                isModuleRequest,
+                port,
+                relativePath,
+              });
+
+              if (result) {
+                if (result.map) {
+                  const codeWithMap = await withSourceMap(
+                    content as string,
+                    result.code as string,
+                    relativePath,
+                    result.map
+                  );
+                  res.writeHead(200, { "Content-Type": result.mimeType });
+                  res.end(codeWithMap);
+                  return;
+                } else {
+                  res.writeHead(200, { "Content-Type": result.mimeType });
+                  res.end(result.code);
+                  return;
+                }
+              }
+            }
           }
 
-          res.writeHead(200, { "Content-Type": mimeType });
-          res.end(finalContent);
+          res.writeHead(200, { "Content-Type": getMimeType(ext) });
+          res.end(content);
           return;
         }
 

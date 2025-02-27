@@ -1,44 +1,57 @@
 {
   "name": "@vite/monorepo",
-  "private": "true",
   "version": "1.0.0",
+  "private": "true",
   "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "author": "huanxiaomang",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "huanxiaomang",
-  "license": "ISC",
-  "engines": {
-    "node": ">= 18"
-  },
   "dependencies": {
+    "@eslint/eslintrc": "^3.3.0",
     "@vite/shared": "workspace:*",
     "cac": "^6.7.14",
     "chokidar": "^4.0.3",
     "commander": "^13.1.0",
     "es-module-lexer": "^1.6.0",
     "esbuild": "^0.25.0",
+    "eslint-plugin-import": "^2.26.0",
     "magic-string": "^0.30.17",
     "picocolors": "^1.1.1",
     "rollup": "^4.34.8",
     "sirv": "^3.0.1",
+    "source-map": "^0.7.4",
     "vite": "workspace:*",
-    "vite-plugin-vue": "workspace:*",
     "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "@types/ws": "^8.5.14",
+    "@typescript-eslint/eslint-plugin": "^8.25.0",
+    "@vite/eslint-config": "workspace:*",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-define-config": "^1.5.1",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-jsonc": "^2.3.0",
+    "eslint-plugin-markdown": "^3.0.0",
+    "eslint-plugin-prettier": "^4.1.0",
+    "eslint-plugin-unicorn": "^43.0.2",
+    "eslint-plugin-vue": "^9.29.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">= 18"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged"
   },
   "lint-staged": {
     "*.{vue,js,ts,jsx,tsx,md,json}": "eslint --fix"
-  },
-  "devDependencies": {
-    "@types/node": "^22.13.5",
-    "@types/ws": "^8.5.14",
-    "eslint": "8.57.1",
-    "tsup": "^8.4.0",
-    "typescript": "^5.7.3"
   }
 }

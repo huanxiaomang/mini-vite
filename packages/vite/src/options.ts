@@ -1,9 +1,13 @@
-import type { NativeViteOptions, ViteContext } from "./type";
+import { defaultPlugins } from "./plugins";
+import type { NativeViteOptions, ViteContext, ViteOptions } from "./type";
 
-export const defineConfig = () => {};
+export const defineConfig = (config: ViteOptions): ViteOptions => config;
 
-export const loadOptions = (options: NativeViteOptions): ViteContext => {
+export const loadOptions = async (
+  options: NativeViteOptions
+): Promise<ViteContext> => {
   return {
     ...options,
+    plugins: defaultPlugins,
   };
 };
