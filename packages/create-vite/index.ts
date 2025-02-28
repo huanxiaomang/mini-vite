@@ -2,7 +2,7 @@
 import { resolve } from "node:path";
 import prompts from "prompts";
 import picocolors from "picocolors";
-import { log } from "@nano-vite/shared";
+import { log } from "@vite/shared";
 import { cloneTemplateTo } from "./clone";
 import { choices, projGuideCommands } from "./constants";
 

@@ -13,8 +13,8 @@
   },
   "devDependencies": {
     "@vue/tsconfig": "^0.7.0",
-    "typescript": "~5.7.2",
     "vite": "workspace:*",
+    "typescript": "~5.7.2",
     "vue-tsc": "^2.2.4"
   }
 }

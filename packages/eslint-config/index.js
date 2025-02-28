@@ -243,10 +243,6 @@ module.exports = defineConfig({
             group: "external",
             position: "before",
           },
-          {
-            pattern: "@nano-ui/**",
-            group: "internal",
-          },
         ],
         pathGroupsExcludedImportTypes: ["type"],
       },

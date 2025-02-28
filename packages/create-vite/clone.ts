@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { copyFiles } from "@nano-vite/shared";
+import { copyFiles } from "@vite/shared";
 
 export const cloneTemplateTo = async (
   templateName: string,

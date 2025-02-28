@@ -1,5 +1,5 @@
 {
-  "name": "@nano-vite/eslint-config",
+  "name": "@vite/eslint-config",
   "version": "0.0.1",
   "description": "ESLint Config",
   "license": "MIT",
