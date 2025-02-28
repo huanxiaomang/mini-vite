@@ -26,9 +26,6 @@ importers:
       es-module-lexer:
         specifier: ^1.6.0
         version: 1.6.0
-      esbuild:
-        specifier: ^0.25.0
-        version: 0.25.0
       eslint-plugin-import:
         specifier: ^2.26.0
         version: 2.31.0(@typescript-eslint/parser@8.25.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)
@@ -207,6 +204,9 @@ importers:
       '@vue/compiler-sfc':
         specifier: ^3.5.13
         version: 3.5.13
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.0
       parse5:
         specifier: ^7.2.1
         version: 7.2.1
@@ -222,6 +222,9 @@ importers:
       rollup-plugin-vue:
         specifier: ^6.0.0
         version: 6.0.0(@vue/compiler-sfc@3.5.13)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
 
   packages/shared: {}
 

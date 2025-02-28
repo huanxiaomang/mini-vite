@@ -6,5 +6,5 @@ export default defineConfig({
   format: "cjs",
   clean: false,
   dts: true,
-  external: ["esbuild", "sourcemap", "rollup"],
+  external: ["sourcemap", "rollup"],
 });

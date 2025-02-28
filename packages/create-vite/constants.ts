@@ -13,5 +13,5 @@ export const choices: Choice[] = [
 
 export const projGuideCommands: Record<string, string[]> = {
   "vanilla-js-template": ["cd $PATH", "pnpm i", "pnpm dev"],
-  "vite-js-template": ["cd $PATH", "pnpm i", "pnpm dev"],
+  "ts-vue-template": ["cd $PATH", "pnpm i", "pnpm dev"],
 } as const;
