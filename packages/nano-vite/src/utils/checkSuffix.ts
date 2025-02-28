@@ -1,6 +1,6 @@
 import { relative } from "node:path";
-import { fileExists, log, normalizeImportPath } from "@vite/shared";
-import { ROOT, possibleExtensions } from "./constant";
+import { fileExists, log, normalizeImportPath } from "@nano-vite/shared";
+import { ROOT, possibleExtensions } from "../constant";
 export async function checkSuffix(
   resolvedPath: string
 ): Promise<string | null> {

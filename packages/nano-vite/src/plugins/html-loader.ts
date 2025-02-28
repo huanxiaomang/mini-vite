@@ -2,7 +2,7 @@ import { hmrClientScript } from "../hmr";
 import type { PluginOption } from "../type";
 
 const plugin: PluginOption = {
-  name: "transform-html",
+  name: "html-loader",
   async transform(content, filePath, { port }) {
     const fileRegex = /\.(html)$/;
     if (!fileRegex.test(filePath) || typeof content !== "string") return null;

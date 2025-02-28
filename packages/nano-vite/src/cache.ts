@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { fileExists, log } from "@vite/shared";
+import { fileExists, log } from "@nano-vite/shared";
 import { METADATA_PATH } from "./constant";
 
 export const depCache: Map<string, string> = new Map();

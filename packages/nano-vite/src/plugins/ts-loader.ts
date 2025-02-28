@@ -3,7 +3,7 @@ import { rewriteImports } from "../imports";
 import type { PluginOption } from "../type";
 
 const plugin: PluginOption = {
-  name: "transform-ts",
+  name: "ts-loader",
   async transform(content, filePath) {
     const fileRegex = /\.(ts)$/;
 

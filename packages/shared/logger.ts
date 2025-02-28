@@ -1,11 +1,10 @@
+/* eslint-disable no-console */
 import pc from "picocolors";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
-// 定义格式化函数类型
 export type Formatter = (input: string | number | null | undefined) => string;
 
-// 定义颜色接口
 export interface Colors {
   reset: Formatter;
   bold: Formatter;
@@ -54,7 +53,6 @@ export interface Colors {
   bgWhiteBright: Formatter;
 }
 
-// 日志等级权重
 const levelWeights: Record<LogLevel, number> = {
   debug: 0,
   info: 1,
@@ -62,7 +60,6 @@ const levelWeights: Record<LogLevel, number> = {
   error: 3,
 };
 
-// 日志等级颜色
 const levelColors: Record<LogLevel, (str: string) => string> = {
   debug: pc.gray,
   info: pc.cyan,
@@ -70,7 +67,6 @@ const levelColors: Record<LogLevel, (str: string) => string> = {
   error: pc.red,
 };
 
-// 定义日志器接口
 interface Logger extends Colors {
   (message: string, ...args: any[]): void;
   debug: (message: string, ...args: any[]) => void;
@@ -87,7 +83,6 @@ function createLogger(minLevel: LogLevel = "info"): Logger {
   const shouldLog = (level: LogLevel) =>
     levelWeights[level] >= levelWeights[minLevel];
 
-  // 核心日志方法
   const logger = Object.assign(
     (message: any, ...args: any[]) => {
       if (shouldLog("info")) {
@@ -118,15 +113,14 @@ function createLogger(minLevel: LogLevel = "info"): Logger {
     }
   );
 
-  // 添加颜色方法
   Object.entries(pc).forEach(([color, fn]) => {
-    (logger as any)[color] = fn;
+    (logger as any)[color] = (message: any, ...args: any[]) =>
+      console.log(fn(message, ...args));
   });
 
   return logger as Logger;
 }
 
-// 根据环境创建默认日志实例
 const env = process.env.NODE_ENV || "development";
 const defaultLevel = env === "production" ? "warn" : "debug";
 export const log = createLogger(defaultLevel);

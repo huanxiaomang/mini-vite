@@ -3,7 +3,7 @@ import { extname, relative } from "node:path";
 import { watch } from "chokidar";
 import { WebSocketServer } from "ws";
 import picocolors from "picocolors";
-import { log } from "@vite/shared";
+import { log } from "@nano-vite/shared";
 import { ROOT, ignoredHMRPath } from "./constant";
 
 export const hmrClientScript = (port: number) => `

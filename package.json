@@ -1,5 +1,5 @@
 {
-  "name": "@vite/monorepo",
+  "name": "@nano-vite/monorepo",
   "version": "1.0.0",
   "private": "true",
   "description": "",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@eslint/eslintrc": "^3.3.0",
-    "@vite/shared": "workspace:*",
+    "@nano-vite/shared": "workspace:*",
     "cac": "^6.7.14",
     "chokidar": "^4.0.3",
     "commander": "^13.1.0",
@@ -21,17 +21,17 @@
     "eslint-plugin-import": "^2.26.0",
     "magic-string": "^0.30.17",
     "picocolors": "^1.1.1",
+    "release-it": "^18.1.2",
     "rollup": "^4.34.8",
     "sirv": "^3.0.1",
     "source-map": "^0.7.4",
-    "vite": "workspace:*",
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@nano-vite/eslint-config": "workspace:*",
     "@types/node": "^22.13.5",
     "@types/ws": "^8.5.14",
     "@typescript-eslint/eslint-plugin": "^8.25.0",
-    "@vite/eslint-config": "workspace:*",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^8.5.0",
     "eslint-define-config": "^1.5.1",

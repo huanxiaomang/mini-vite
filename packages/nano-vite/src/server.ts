@@ -8,7 +8,7 @@ import {
   getMimeType,
   log,
   normalizeImportPath,
-} from "@vite/shared";
+} from "@nano-vite/shared";
 import picocolors from "picocolors";
 import serve from "sirv";
 import { loadDepCache } from "./cache";

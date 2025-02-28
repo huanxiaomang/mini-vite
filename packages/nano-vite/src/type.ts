@@ -1,6 +1,10 @@
 import { IncomingMessage, ServerResponse, type createServer } from "node:http";
+import type { DefaultTreeAdapterMap } from "parse5";
 import type { RollupOptions } from "rollup";
 import type { RawSourceMap } from "source-map";
+
+export type Node = DefaultTreeAdapterMap["node"];
+export type Element = DefaultTreeAdapterMap["element"];
 
 export interface ServerInstance {
   server: ReturnType<typeof createServer>;
@@ -18,6 +22,7 @@ export interface RequestContext {
 
 export interface PluginOption {
   name: string;
+  writeBundle?: () => void;
   transform?: (
     content: string | Buffer,
     filePath: string,

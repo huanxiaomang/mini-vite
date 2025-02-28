@@ -1,0 +1,24 @@
+{
+  "name": "create-nanovite",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "author": "",
+  "main": "index.js",
+  "bin": {
+    "create-nanovite": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsup --watch --onSuccess \"npm link\"",
+    "build": "tsup --minify && npm link",
+    "release": "release-it"
+  },
+  "file": [
+    "dist"
+  ],
+  "dependencies": {
+    "@types/prompts": "^2.4.9",
+    "prompts": "^2.4.2"
+  }
+}

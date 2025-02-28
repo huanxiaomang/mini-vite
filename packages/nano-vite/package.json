@@ -1,18 +1,22 @@
 {
-  "name": "vite",
+  "name": "nano-vite",
   "version": "1.0.0",
   "description": "",
   "keywords": [],
   "license": "ISC",
   "author": "",
+  "files": [
+    "dist"
+  ],
   "main": "index.js",
   "bin": {
-    "vite": "./bin/cli"
+    "nano-vite": "./bin/cli"
   },
   "scripts": {
     "dev": "tsup --watch --onSuccess \"pnpm load\"",
     "build": "tsup --minify && pnpm load",
-    "load": "npm link"
+    "load": "npm link",
+    "release": "release-it"
   },
   "dependencies": {
     "@rollup/plugin-image": "^3.0.3",

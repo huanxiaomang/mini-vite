@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { log } from "@vite/shared";
+import { log } from "@nano-vite/shared";
 import { program } from "commander";
 import pkg from "../package.json" assert { type: "json" };
 import { startDevServer } from "./server";

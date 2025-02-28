@@ -9,7 +9,7 @@ import { rewriteImports } from "../imports";
 import type { PluginOption } from "../type";
 
 const plugin: PluginOption = {
-  name: "transform-vue",
+  name: "vue-loader",
   async transform(content, filePath) {
     const fileRegex = /\.(vue)$/;
 

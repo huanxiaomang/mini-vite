@@ -1,4 +1,4 @@
-import { log } from "@vite/shared";
+import { log } from "@nano-vite/shared";
 import type { RawSourceMap } from "source-map";
 
 export async function withSourceMap(

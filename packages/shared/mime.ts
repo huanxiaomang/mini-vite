@@ -24,3 +24,5 @@ export const TEXT_EXTENSIONS = [
   ".svg",
 ];
 export const BINARY_EXTENSIONS = [".png", ".jpg", ".jpeg"];
+export const IMG_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"];
+export const CODE_EXTENSIONS = [".js", ".ts", ".vue", ".css"];

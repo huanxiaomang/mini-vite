@@ -1,7 +1,7 @@
 import type { PluginOption } from "../type";
 
 const plugin: PluginOption = {
-  name: "transform-css",
+  name: "css-loader",
   async transform(content, filePath) {
     const fileRegex = /\.(css)$/;
     if (!fileRegex.test(filePath) || typeof content !== "string") return null;
