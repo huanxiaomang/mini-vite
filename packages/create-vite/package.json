@@ -1,5 +1,5 @@
 {
-  "name": "create-vite",
+  "name": "create-lite-vite",
   "version": "2.0.0",
   "description": "",
   "keywords": [],
@@ -7,7 +7,7 @@
   "author": "",
   "main": "index.js",
   "bin": {
-    "create-vite": "dist/index.js"
+    "create-lite-vite": "dist/index.js"
   },
   "scripts": {
     "dev": "tsup --watch --onSuccess \"npm link\"",

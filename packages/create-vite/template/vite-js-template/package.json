@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cls && vite dev",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "cls && lite-vite dev",
+    "build": "lite-vite build"
   },
   "dependencies": {
-    "lodash-es": "^4.17.21"
+    "lodash-es": "^4.17.21",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
-    "vite": "workspace:*"
+    "lite-vite": "workspace:*"
   }
 }

@@ -11,7 +11,7 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3.3.0
         version: 3.3.0
-      '@vite/shared':
+      '@lite-vite/shared':
         specifier: workspace:*
         version: link:packages/shared
       cac:
@@ -50,13 +50,13 @@ importers:
       source-map:
         specifier: ^0.7.4
         version: 0.7.4
-      typescript:
-        specifier: ^5.7.3
-        version: 5.7.3
       ws:
         specifier: ^8.18.1
         version: 8.18.1
     devDependencies:
+      '@lite-vite/eslint-config':
+        specifier: workspace:*
+        version: link:packages/eslint-config
       '@types/node':
         specifier: ^22.13.5
         version: 22.13.5
@@ -66,9 +66,6 @@ importers:
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.25.0
         version: 8.25.0(@typescript-eslint/parser@8.25.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3)
-      '@vite/eslint-config':
-        specifier: workspace:*
-        version: link:packages/eslint-config
       eslint:
         specifier: ^8.57.1
         version: 8.57.1
@@ -99,6 +96,9 @@ importers:
       tsup:
         specifier: ^8.4.0
         version: 8.4.0(postcss@8.5.3)(typescript@5.7.3)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
 
   packages/create-vite:
     dependencies:
@@ -109,7 +109,7 @@ importers:
         specifier: ^2.4.2
         version: 2.4.2
 
-  packages/create-vite/ts-vue-template:
+  packages/create-vite/template/ts-vue-template:
     dependencies:
       vue:
         specifier: ^3.5.13
@@ -118,25 +118,28 @@ importers:
       '@vue/tsconfig':
         specifier: ^0.7.0
         version: 0.7.0(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3))
+      lite-vite:
+        specifier: workspace:*
+        version: link:../../../lite-vite
       typescript:
         specifier: ~5.7.2
         version: 5.7.3
-      vite:
-        specifier: workspace:*
-        version: link:../../vite
       vue-tsc:
         specifier: ^2.2.4
         version: 2.2.4(typescript@5.7.3)
 
-  packages/create-vite/vite-js-template:
+  packages/create-vite/template/vite-js-template:
     dependencies:
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.13(typescript@5.7.3)
     devDependencies:
-      vite:
+      lite-vite:
         specifier: workspace:*
-        version: link:../../vite
+        version: link:../../../lite-vite
 
   packages/eslint-config:
     dependencies:
@@ -190,9 +193,7 @@ importers:
         specifier: ^8.57.1
         version: 8.57.1
 
-  packages/shared: {}
-
-  packages/vite:
+  packages/lite-vite:
     dependencies:
       '@rollup/plugin-image':
         specifier: ^3.0.3
@@ -221,9 +222,8 @@ importers:
       rollup-plugin-vue:
         specifier: ^6.0.0
         version: 6.0.0(@vue/compiler-sfc@3.5.13)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.7.3
+
+  packages/shared: {}
 
 packages:
 

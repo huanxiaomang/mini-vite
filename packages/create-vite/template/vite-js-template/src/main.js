@@ -2,7 +2,7 @@ import "./style.css";
 import { h } from "vue";
 import { cloneDeep } from "lodash-es";
 import javascriptLogo from "./javascript.svg";
-import viteLogo from "/vite.svg";
+import viteLogo from "./vite.svg";
 import { setupCounter } from "./counter";
 import SUBARU from "./assets/486.png";
 

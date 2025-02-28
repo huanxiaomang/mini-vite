@@ -1,4 +1,4 @@
 {
   "root": true,
-  "extends": ["@vite/eslint-config"]
+  "extends": ["@lite-vite/eslint-config"]
 }
