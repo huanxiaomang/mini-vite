@@ -1,22 +1,38 @@
-# mini-vite 挑战
+# lite-vite
 
 如你所见，这是一个**限时挑战**——3 天时间复刻一个迷你版的 Vite，每一天只有一次 push，是一个颜文字。
-主要包含 `create-vite` 和 `lite-vite` 模块，使用 `esbuild` 预构建依赖，`rollup` 打包项目，和一些简单的 loader 去转换 `vue3`、`png`、`ts` 等资源。
+
+主要包含 `create-vite` 和 `lite-vite` 模块，使用 `esbuild` 预构建依赖，`rollup` 打包项目，实现了一些简单的 loader 去转换 `vue3`、`png`、`ts` 等资源。
 
 ## 最快速度体验 lite-vite
 
 只需要一条命令创建项目模板，包含原生 JS 和 Vue3+TS 两个版本：
 
 ```bash
-pnpm create lite-vite
+pnpm create lite-vite@latest
 ```
 
 然后可以像 Vite 一样开启 dev 模式或打包：
 
-```bash
-lite-vite dev
-lite-vite build
+```json
+{
+  "scripts": {
+    "dev": "lite-vite dev -p 3456", // 启动开发服务器
+    "build": "lite-vite build" // 为生产环境构建产物
+  }
+}
 ```
+
+或者直接执行：
+
+```bash
+npx lite-vite dev -p 3456
+npx lite-vite build
+```
+
+尝试修改 js 或 html 文件，开发服务器会自动进行热更新。
+
+查看 [create-vite](https://github.com/huanxiaomang/mini-vite/tree/main/packages/create-vite/template) 以获取每个模板的更多细节。
 
 ## 在现有项目中引入
 
@@ -59,7 +75,4 @@ npx lite-vite help build
 - [ ] 支持加载 `vite.config.ts`
 - [ ] 支持传入 Rollup 插件
 
-## 后续计划
-
-有空会做更多更完善，但现在先去准备暑期实习了！
 我会加油哒 (●• ̀ω•́ )✧
