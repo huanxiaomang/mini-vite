@@ -63,6 +63,8 @@ npx lite-vite help build
 - [x] Rollup 实现 build 打包模式
 - [x] 实现 plugin 处理 `public/` 目录
 - [x] 实现 `create-lite-vite` 脚手架
+- [x] 实现 CSS HMR策略
+- [x] 实现JS传播更新
 
 ## 未实现功能
 
