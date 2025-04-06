@@ -1,7 +1,5 @@
 # lite-vite
 
-如你所见，这是一个**限时挑战**——3 天时间复刻一个迷你版的 Vite，每一天只有一次 push，是一个颜文字。
-
 主要包含 `create-vite` 和 `lite-vite` 模块，使用 `esbuild` 预构建依赖，`rollup` 打包项目，实现了一些简单的 loader 去转换 `vue3`、`png`、`ts` 等资源。
 
 ## 最快速度体验 lite-vite
