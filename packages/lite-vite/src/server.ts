@@ -13,7 +13,7 @@ import picocolors from "picocolors";
 import serve from "sirv";
 import { loadDepCache } from "./cache";
 import { DEFAULT_PORT, PUBLIC_DIR, ROOT } from "./constant";
-import { setupHmr } from "./hmr";
+import { HMR_CLIENT_PATH, getHmrClientContent, setupHmr } from "./hmr";
 import { withSourceMap } from "./sourcemap";
 import type { ServerInstance, ViteContext } from "./type";
 
@@ -31,21 +31,39 @@ export async function startDevServer(
       const url = req.url || "/";
       log.debug(`Request: ${url}`);
 
-      const isModuleRequest = url.includes("?import");
+      if (url === HMR_CLIENT_PATH) {
+        res.writeHead(200, { "Content-Type": "application/javascript" });
+        res.end(getHmrClientContent());
+        return;
+      }
+
+      // 判断是否为模块请求 - 需要更精确的检测
+      const isModuleRequest =
+        url.includes("?import") ||
+        url.includes("?t=") ||
+        !!req.headers.accept?.includes("module") ||
+        !!req.headers.referer?.includes("import");
+
       let filePath: string;
 
       if (url === "/") {
         filePath = ctx.entry;
       } else {
-        const publicPath = resolve(PUBLIC_DIR, url.slice(1).split("?")[0]);
+        // 保留原始 URL 用于模块请求判断
+        const cleanUrl = url.split("?")[0]; // 移除查询参数
+        const publicPath = resolve(PUBLIC_DIR, cleanUrl.slice(1));
         if (await fileExists(publicPath)) {
           filePath = publicPath;
         } else {
-          filePath = resolve(ROOT, url.slice(1));
+          filePath = resolve(ROOT, cleanUrl.slice(1));
         }
       }
 
-      filePath = filePath.split("?")[0];
+      // 记录文件路径和模块请求状态
+      log.debug(`处理文件: ${filePath}, 模块请求: ${isModuleRequest}`);
+
+      // 文件路径不应包含查询参数
+      // filePath = filePath.split("?")[0]; // 这行可以移除，因为已经在上面处理
       const ext = extname(filePath).toLowerCase();
       log.debug("Resolved filePath:", filePath, "ext:", ext);
 

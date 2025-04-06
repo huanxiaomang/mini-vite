@@ -26,6 +26,8 @@ export async function rewriteImports(
 
     const ext = extname(importPath).toLowerCase();
     const isStaticAsset = ext && !CODE_EXTENSIONS.includes(ext);
+    const isCssFile = ext === ".css";
+
     let rewrittenPath: string | undefined;
 
     if (importPath.startsWith(".") || importPath.startsWith("/")) {
@@ -40,7 +42,7 @@ export async function rewriteImports(
         rewrittenPath = normalizeImportPath(relative(ROOT, resolvedPath));
       }
 
-      if (isStaticAsset) {
+      if (isStaticAsset || isCssFile) {
         rewrittenPath += "?import";
       }
     } else {
@@ -48,14 +50,15 @@ export async function rewriteImports(
       const cachedPath =
         depCache.get(pkgName) || (await preBundleDependency(pkgName));
       rewrittenPath = normalizeImportPath(relative(ROOT, cachedPath));
-      if (isStaticAsset) {
+
+      if (isStaticAsset || isCssFile) {
         rewrittenPath += "?import";
       }
     }
 
     if (rewrittenPath) {
       ms.overwrite(start, end, rewrittenPath);
-      log.debug(`Rewrote import: ${importPath} -> ${rewrittenPath}`);
+      log.debug(`重写导入: ${importPath} -> ${rewrittenPath}`);
     }
   }
 

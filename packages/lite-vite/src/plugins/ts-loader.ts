@@ -1,4 +1,4 @@
-import * as ts from "typescript";
+import esbuild from "esbuild";
 import { rewriteImports } from "../imports";
 import type { PluginOption } from "../type";
 
@@ -9,24 +9,28 @@ const plugin: PluginOption = {
 
     if (!fileRegex.test(filePath) || typeof content !== "string") return null;
 
-    const result = ts.transpileModule(content, {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ESNext,
-        sourceMap: true,
-        inlineSourceMap: true,
-        inlineSources: true,
-      },
-      fileName: filePath,
-    });
-    const codeWithMap = result.outputText;
-    const rewrittenCodeWithMap = await rewriteImports(codeWithMap, filePath);
+    try {
+      const result = await esbuild.transform(content, {
+        loader: "ts",
+        target: "esnext",
+        format: "esm",
+        sourcemap: "inline",
+        sourcefile: filePath,
+      });
 
-    return {
-      code: rewrittenCodeWithMap,
-      mimeType: "application/javascript",
-      map: null,
-    };
+      const codeWithMap = result.code;
+
+      const rewrittenCodeWithMap = await rewriteImports(codeWithMap, filePath);
+
+      return {
+        code: rewrittenCodeWithMap,
+        mimeType: "application/javascript",
+        map: null,
+      };
+    } catch (error) {
+      console.error(`Error transforming ${filePath}:`, error);
+      throw error;
+    }
   },
 };
 
