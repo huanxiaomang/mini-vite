@@ -15,6 +15,7 @@ import { loadDepCache } from "./cache";
 import { DEFAULT_PORT, PUBLIC_DIR, ROOT } from "./constant";
 import { HMR_CLIENT_PATH, getHmrClientContent, setupHmr } from "./hmr";
 import { withSourceMap } from "./sourcemap";
+import { ModuleGraph } from "./moduleGraph";
 import type { ServerInstance, ViteContext } from "./type";
 
 export async function startDevServer(
@@ -22,6 +23,9 @@ export async function startDevServer(
 ): Promise<ServerInstance> {
   log.debug("Starting dev server...");
   await loadDepCache();
+
+  // 创建模块依赖图
+  const moduleGraph = new ModuleGraph();
 
   const port = ctx.port || DEFAULT_PORT;
   const staticServer = serve(PUBLIC_DIR, { dev: true, single: true });
@@ -37,7 +41,7 @@ export async function startDevServer(
         return;
       }
 
-      // 判断是否为模块请求 - 需要更精确的检测
+      // 判断是否为模块请求
       const isModuleRequest =
         url.includes("?import") ||
         url.includes("?t=") ||
@@ -63,7 +67,7 @@ export async function startDevServer(
       log.debug(`处理文件: ${filePath}, 模块请求: ${isModuleRequest}`);
 
       // 文件路径不应包含查询参数
-      // filePath = filePath.split("?")[0]; // 这行可以移除，因为已经在上面处理
+      // filePath = filePath.split("?")[0];
       const ext = extname(filePath).toLowerCase();
       log.debug("Resolved filePath:", filePath, "ext:", ext);
 
@@ -77,6 +81,36 @@ export async function startDevServer(
           const relativePath = filePath.startsWith(PUBLIC_DIR)
             ? normalizeImportPath(relative(PUBLIC_DIR, filePath))
             : normalizeImportPath(relative(ROOT, filePath));
+
+          // 如果是 JS/TS/vue 文件，则记录到模块依赖图中
+          if (
+            (ext === ".js" ||
+              ext === ".ts" ||
+              ext === ".jsx" ||
+              ext === ".tsx" ||
+              ext === ".vue") &&
+            typeof content === "string"
+          ) {
+            log.debug(`注册模块到依赖图: ${filePath}, url: ${url}`);
+
+            // 将文件路径统一为正斜杠格式
+            const normalizedPath = filePath.replace(/\\/g, "/");
+
+            // 创建模块URL
+            const moduleUrl = url.split("?")[0]; // 移除查询参数
+
+            // 创建或更新模块在依赖图中
+            moduleGraph.ensureEntryFromUrl(moduleUrl, normalizedPath);
+
+            // 更新模块代码并分析导入关系
+            await moduleGraph.updateModuleCode(normalizedPath, content);
+
+            log.debug(`模块注册完成: ${moduleUrl} -> ${normalizedPath}`);
+
+            // 输出当前模块图状态
+            const modCount = moduleGraph.getEntireFileMap().size;
+            log.debug(`当前模块图中共有 ${modCount} 个模块`);
+          }
 
           for (const plugin of ctx.plugins) {
             if (plugin.transform) {
@@ -123,7 +157,8 @@ export async function startDevServer(
     }
   );
 
-  setupHmr(server);
+  // 设置 HMR 并共享模块依赖图
+  setupHmr(server, moduleGraph);
 
   return new Promise((resolvePromise) => {
     server.listen(port, () => {

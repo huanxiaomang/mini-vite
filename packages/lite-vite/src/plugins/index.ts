@@ -7,9 +7,9 @@ import ImgLoader from "./image-loader";
 import type { PluginOption } from "../type";
 
 export const defaultPlugins: PluginOption[] = [
-  VueLoader,
-  CSSLoader,
   HTMLoader,
+  CSSLoader,
+  VueLoader,
   JSLoader,
   ImgLoader,
   TSLoader,

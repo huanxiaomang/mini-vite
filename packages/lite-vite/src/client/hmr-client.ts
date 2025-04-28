@@ -1,366 +1,401 @@
 /**
  * HMR 客户端脚本 - 热模块替换功能
+ * 基于 Vite 的 HMR 客户端实现
  */
 
-// 定义消息类型
+// 定义 HMR 载荷类型
 interface HMRPayload {
-  type: "connected" | "update" | "full-reload" | "remove-style" | "prune";
+  type: "connected" | "update" | "full-reload" | "prune" | "error";
   path?: string;
-  id?: string;
+  updates?: Update[];
+  timestamp?: number;
+  paths?: string[];
+  err?: {
+    message: string;
+    stack: string;
+  };
 }
 
-// 定义热更新上下文接口
+// 更新类型
+interface Update {
+  type: "js-update" | "css-update";
+  path: string;
+  acceptedPath: string;
+  timestamp: number;
+}
+
+// HMR 上下文接口
 interface HotContext {
-  accept(callback?: (mod: any) => void): void;
-  dispose(callback: () => void): void;
-  prune(callback: () => void): void;
-  // 内部属性，不应该被直接访问
-  readonly _acceptCallbacks: Array<(mod: any) => void>;
-  readonly _disposeCallbacks: Array<() => void>;
-  readonly _pruneCallbacks: Array<() => void>;
-  readonly _ownerPath: string;
+  // 模块数据
+  data: any;
+  // 接受模块自身或依赖的更新
+  accept(
+    deps?: string | string[] | ((data?: any) => void),
+    callback?: (data?: any) => void
+  ): void;
+  // 销毁回调
+  dispose(cb: (data: any) => void): void;
+  // 剪枝回调 - 模块不再被引用时调用
+  prune(cb: (data: any) => void): void;
+  // 主动使当前模块失效，通常会触发页面刷新
+  invalidate(message?: string): void;
+  // 自定义事件监听
+  on(event: string, cb: (payload: any) => void): void;
+  // 移除自定义事件监听
+  off(event: string, cb: (payload: any) => void): void;
+  // 发送自定义事件
+  send(event: string, data?: any): void;
 }
 
-// 存储所有管理的样式标签
-const styles = new Map<string, HTMLStyleElement>();
-
-// 更新队列，确保按顺序处理更新
-const updateQueue: Array<() => Promise<void>> = [];
-let queued = false;
-
-// WebSocket 连接
-let socket: WebSocket | null = null;
-let isConnected = false;
+// 热模块类型 - 更新为使用Set和Map
+interface HotModule {
+  id: string;
+  callbacks: Set<(data?: any) => void>;
+  deps: Map<string, Set<(data?: any) => void>>;
+  selfAccepted: boolean;
+}
 
 // 日志级别类型
 type LogLevel = "info" | "warn" | "error";
 
 /**
- * 记录日志
+ * 输出日志
  * @param msg 日志消息
  * @param level 日志级别
  */
 function log(msg: string, level: LogLevel = "info"): void {
-  const prefix = "[vite]";
-  const method =
-    level === "error"
-      ? console.error
+  const prefix = "[vite-hmr]";
+  const style =
+    level === "info"
+      ? "color:green;font-weight:bold"
       : level === "warn"
-      ? console.warn
-      : console.log;
-
-  method(`${prefix} ${msg}`);
+      ? "color:orange;font-weight:bold"
+      : "color:red;font-weight:bold";
+  // eslint-disable-next-line no-console
+  console.log(`%c${prefix}%c ${msg}`, style, "color:inherit");
 }
 
-/**
- * 初始化 WebSocket 连接
- * @param port WebSocket 服务器端口号
- */
-function setupWebSocket(port: number): void {
-  if (socket) return;
-
-  const url = `ws://localhost:${port}`;
-  socket = new WebSocket(url);
-
-  socket.addEventListener("open", () => {
-    isConnected = true;
-    log(
-      `WebSocket 连接已建立 (状态: ${isConnected ? "已连接" : "未连接"})`,
-      "info"
-    );
-  });
-
-  socket.addEventListener("message", async (event: MessageEvent<string>) => {
-    try {
-      const payload = JSON.parse(event.data) as HMRPayload;
-
-      if (payload.type === "connected") {
-        log("HMR 客户端已连接", "info");
-      } else if (payload.type === "update") {
-        if (payload.path && payload.path.endsWith(".css")) {
-          // 处理 CSS 文件更新 - 这里不再需要执行特殊逻辑
-          // CSS 模块会通过 import.meta.hot.accept 自行处理
-          log(`检测到 CSS 更新: ${payload.path}`, "info");
-          queueUpdate(() => updateModule(payload.path!));
-        } else if (payload.path) {
-          queueUpdate(() => updateModule(payload.path!));
-        }
-      } else if (payload.type === "full-reload") {
-        window.location.reload();
-      } else if (payload.type === "prune") {
-        // 处理文件删除事件 - 触发对应模块的 prune 回调
-        if (payload.path) {
-          log(`检测到文件删除: ${payload.path}`, "info");
-          pruneModule(payload.path);
-        }
-      } else if (payload.type === "remove-style") {
-        log(`检测到样式移除: ${payload.id || payload.path}`, "info");
-        // 尝试通过 id 移除，如果没有 id 则尝试通过 path 移除
-        if (payload.id) {
-          queueUpdate(() => removeStyle(payload.id!));
-        } else if (payload.path) {
-          // 找到匹配路径的样式并移除
-          for (const [id] of styles.entries()) {
-            if (id.includes(payload.path!)) {
-              queueUpdate(() => removeStyle(id));
-            }
-          }
-        }
-      }
-    } catch (e) {
-      log(`处理 HMR 消息错误: ${e}`, "error");
-    }
-  });
-
-  socket.addEventListener("close", (event: CloseEvent) => {
-    isConnected = false;
-    log(`WebSocket 连接已关闭 (代码: ${event.code})，尝试重新连接...`, "warn");
-    setTimeout(() => setupWebSocket(port), 1000);
-  });
-
-  socket.addEventListener("error", (event: Event) => {
-    log(`WebSocket 错误: ${event}`, "error");
-  });
-}
-
-/**
- * 添加更新到队列
- */
-function queueUpdate(fn: () => Promise<void> | void): void {
-  updateQueue.push(fn as () => Promise<void>);
-  if (!queued) {
-    queued = true;
-    Promise.resolve().then(async () => {
-      queued = false;
-      try {
-        for (const fn of updateQueue) {
-          await fn();
-        }
-      } catch (e) {
-        log(`HMR 更新失败: ${e}`, "error");
-      }
-
-      updateQueue.length = 0;
-    });
-  }
-}
-
-/**
- * 更新样式 - Vite 风格的样式更新
- * 通过创建/更新 style 标签而不是 link 标签
- */
-export function updateStyle(
-  id: string,
-  css: string,
-  modulePath?: string
-): void {
-  let style = styles.get(id);
-
-  // 如果提供了模块路径，可用于后续查找热更新上下文
-  const path = modulePath || id;
-
-  if (!style) {
-    // 创建新样式
-    style = document.createElement("style");
-    style.setAttribute("type", "text/css");
-    style.dataset.viteCssId = id;
-    // 存储样式对应的模块路径，用于后续查找热更新上下文
-    style.dataset.viteModulePath = path;
-    style.textContent = css;
-    document.head.appendChild(style);
-    styles.set(id, style);
-    log(`CSS 已添加: ${id}`, "info");
-  } else {
-    // 更新已有样式
-    style.textContent = css;
-    // 确保模块路径始终是最新的
-    style.dataset.viteModulePath = path;
-    log(`CSS 已更新: ${id}`, "info");
-  }
-}
-
-/**
- * 移除样式 - Vite 风格
- */
-export function removeStyle(id: string): void {
-  const style = styles.get(id);
-  if (style) {
-    document.head.removeChild(style);
-    styles.delete(id);
-    log(`CSS 已移除: ${id}`, "info");
-  }
-}
-
-// 定义模块更新事件的详情类型
-interface ModuleUpdateEventDetail {
-  path: string;
-}
-
-// 声明自定义事件类型
-declare global {
-  interface WindowEventMap {
-    "vite:moduleUpdated": CustomEvent<ModuleUpdateEventDetail>;
-  }
-
-  // 声明 import.meta 类型
-  interface ImportMeta {
-    hot?: HotContext;
-  }
-
-  interface Window {
-    __LITE_VITE_HMR__: {
-      updateStyle: (id: string, css: string, modulePath?: string) => void;
-      removeStyle: (id: string) => void;
-      createHotContext: (ownerPath: string) => HotContext;
-    };
-  }
-}
-
-/**
- * 更新模块
- */
-async function updateModule(path: string): Promise<void> {
-  // 添加适当的查询参数，保留模块请求标识，同时添加时间戳
-  const moduleQuery = path.includes("?") ? "&" : "?";
-  const url = `${path}${moduleQuery}import&t=${Date.now()}`;
-  try {
-    await import(url);
-    log(`模块已更新: ${path}`, "info");
-
-    // 触发自定义事件
-    window.dispatchEvent(
-      new CustomEvent<ModuleUpdateEventDetail>("vite:moduleUpdated", {
-        detail: { path },
-      })
-    );
-  } catch (e) {
-    log(`模块更新失败: ${path}, ${e}`, "error");
-  }
-}
-
-/**
- * 处理模块被删除的情况
- * 查找并触发模块注册的 prune 回调
- */
-function pruneModule(path: string): void {
-  // 查找所有注册的热模块上下文
-  const contexts = findHotModuleContexts(path);
-
-  if (contexts.length === 0) {
-    log(`未找到与 ${path} 关联的热模块上下文`, "warn");
-    return;
-  }
-
-  // 触发所有匹配模块的 prune 回调
-  for (const ctx of contexts) {
-    log(`执行模块 ${ctx._ownerPath} 的 prune 回调`, "info");
-    for (const cb of ctx._pruneCallbacks) {
-      try {
-        cb();
-      } catch (e) {
-        log(`执行 prune 回调时出错: ${e}`, "error");
-      }
-    }
-  }
-}
-
-/**
- * 查找与指定路径匹配的所有热模块上下文
- */
-function findHotModuleContexts(path: string): HotContext[] {
-  const contexts: HotContext[] = [];
-
-  // 首先尝试直接从热模块映射表中获取
-  const ctx = hotModulesMap.get(path);
-  if (ctx) {
-    contexts.push(ctx);
-    return contexts;
-  }
-
-  // 如果直接查找失败，尝试通过样式元素关联查找
-  for (const style of styles.values()) {
-    const moduleId = style.dataset.viteModulePath;
-    if (
-      moduleId &&
-      (moduleId === path || path.includes(moduleId) || moduleId.includes(path))
-    ) {
-      const ctx = hotModulesMap.get(moduleId);
-      if (ctx) {
-        contexts.push(ctx);
-      }
-    }
-  }
-
-  return contexts;
-}
-
-// 存储已创建的热模块上下文
-const hotModulesMap = new Map<string, HotContext>();
-
-/**
- * 创建热更新上下文
- */
-export function createHotContext(ownerPath: string): HotContext {
-  // 已接受的回调函数
-  const acceptCallbacks: Array<(mod: any) => void> = [];
-  // 模块销毁时的回调函数
-  const disposeCallbacks: Array<() => void> = [];
-  // 模块被移除时的回调函数
-  const pruneCallbacks: Array<() => void> = [];
-
-  const hot: HotContext = {
-    accept(callback?: (mod: any) => void) {
-      if (callback) {
-        acceptCallbacks.push(callback);
-      }
-    },
-
-    dispose(callback: () => void) {
-      disposeCallbacks.push(callback);
-    },
-
-    prune(callback: () => void) {
-      pruneCallbacks.push(callback);
-    },
-
-    // 内部方法，执行接受的回调
-    _acceptCallbacks: acceptCallbacks,
-    _disposeCallbacks: disposeCallbacks,
-    _pruneCallbacks: pruneCallbacks,
-    _ownerPath: ownerPath,
-  };
-
-  // 将创建的上下文存储到全局映射中
-  hotModulesMap.set(ownerPath, hot);
-
-  return hot;
-}
-
-/**
- * 初始化 HMR
- * @param port WebSocket 服务器端口号
- */
-export function init(port: number): void {
-  setupWebSocket(port);
-
-  log(
-    `HMR 客户端已初始化 (连接状态: ${isConnected ? "已连接" : "正在连接"})`,
-    "info"
-  );
-}
-
-/**
- * HMR 客户端默认导出
- */
-export default {
-  init,
-  updateStyle,
-  removeStyle,
-  createHotContext,
+// 添加日志级别方法
+const logger = {
+  info: (msg: string) => log(msg, "info"),
+  warn: (msg: string) => log(msg, "warn"),
+  error: (msg: string) => log(msg, "error"),
 };
 
-window.__LITE_VITE_HMR__ = {
+/**
+ * HMR 上下文实现类
+ * 为每个模块提供 hot API
+ */
+class HMRContext implements HotContext {
+  private newListeners: Map<string, ((data: any) => void)[]>;
+  selfAccepted: boolean = false;
+
+  constructor(private hmrClient: HMRClient, public ownerPath: string) {
+    if (!hmrClient.dataMap.has(ownerPath)) {
+      hmrClient.dataMap.set(ownerPath, {});
+    }
+
+    const mod = hmrClient.hotModulesMap.get(ownerPath);
+    if (mod) {
+      mod.callbacks = new Set<(data?: any) => void>();
+      mod.deps = new Map<string, Set<(data?: any) => void>>();
+      mod.selfAccepted = false;
+    } else {
+      hmrClient.hotModulesMap.set(ownerPath, {
+        id: ownerPath,
+        callbacks: new Set<(data?: any) => void>(),
+        deps: new Map<string, Set<(data?: any) => void>>(),
+        selfAccepted: false,
+      });
+    }
+
+    this.newListeners = new Map();
+    hmrClient.ctxToListenersMap.set(ownerPath, this.newListeners);
+  }
+
+  get data(): any {
+    return this.hmrClient.dataMap.get(this.ownerPath);
+  }
+
+  accept(
+    dep?: string | string[] | ((data?: any) => void),
+    callback?: (data?: any) => void
+  ): void {
+    if (typeof dep === "function" || !dep) {
+      logger.info(`Module ${this.ownerPath} registered for hot update`);
+      this.selfAccepted = true;
+      const mod = this.hmrClient.hotModulesMap.get(this.ownerPath);
+      if (mod) {
+        mod.selfAccepted = true;
+        if (typeof dep === "function") {
+          mod.callbacks.add(dep);
+        } else {
+          mod.callbacks.add(() => {});
+        }
+      }
+    } else if (typeof dep === "string") {
+      logger.info(
+        `Module ${this.ownerPath} accepted hot update for dependency ${dep}`
+      );
+      const mod = this.hmrClient.hotModulesMap.get(this.ownerPath);
+      if (mod) {
+        if (!mod.deps.has(dep)) {
+          mod.deps.set(dep, new Set());
+        }
+        if (callback) {
+          mod.deps.get(dep)!.add(callback);
+        }
+      }
+    } else if (Array.isArray(dep)) {
+      logger.info(
+        `Module ${this.ownerPath} accepted multiple hot updates: ${dep.join(
+          ", "
+        )}`
+      );
+      const mod = this.hmrClient.hotModulesMap.get(this.ownerPath);
+      if (mod && callback) {
+        dep.forEach((d) => {
+          if (!mod.deps.has(d)) {
+            mod.deps.set(d, new Set());
+          }
+          mod.deps.get(d)!.add(callback);
+        });
+      }
+    } else {
+      throw new TypeError(
+        `'hot.accept()' expects a string, array, or function parameter, but received ${typeof dep}`
+      );
+    }
+  }
+
+  dispose(cb: (data: any) => void): void {
+    this.hmrClient.disposeMap.set(this.ownerPath, cb);
+  }
+
+  prune(cb: (data: any) => void): void {
+    this.hmrClient.pruneMap.set(this.ownerPath, cb);
+  }
+
+  decline(): void {}
+
+  invalidate(message?: string): void {
+    logger.info(
+      `Module invalidated: ${this.ownerPath}${message ? `: ${message}` : ""}`
+    );
+    location.reload();
+  }
+
+  on(event: string, cb: (payload: any) => void): void {
+    const addToMap = (map: Map<string, any[]>) => {
+      const existing = map.get(event) || [];
+      existing.push(cb);
+      map.set(event, existing);
+    };
+    addToMap(this.hmrClient.customListenersMap);
+    addToMap(this.newListeners);
+  }
+
+  off(event: string, cb: (payload: any) => void): void {
+    const removeFromMap = (map: Map<string, any[]>) => {
+      const existing = map.get(event);
+      if (existing === undefined) return;
+      const pruned = existing.filter((l) => l !== cb);
+      if (pruned.length === 0) {
+        map.delete(event);
+      } else {
+        map.set(event, pruned);
+      }
+    };
+    removeFromMap(this.hmrClient.customListenersMap);
+    removeFromMap(this.newListeners);
+  }
+
+  send(event: string, data?: any): void {
+    this.hmrClient.sendCustomEvent(event, data);
+  }
+}
+
+/**
+ * HMR客户端
+ * 负责处理热更新消息
+ */
+class HMRClient {
+  private socket: WebSocket | null = null;
+  private isConnected = false;
+
+  public hotModulesMap = new Map<string, HotModule>();
+  public dataMap = new Map<string, any>();
+  public disposeMap = new Map<string, (data: any) => void>();
+  public pruneMap = new Map<string, (data: any) => void>();
+  public customListenersMap = new Map<string, ((payload: any) => void)[]>();
+  public ctxToListenersMap = new Map<
+    string,
+    Map<string, ((data: any) => void)[]>
+  >();
+
+  constructor() {}
+
+  connect(): void {
+    if (this.socket) {
+      this.socket.close();
+    }
+
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const host = location.host;
+    const socketUrl = `${protocol}://${host}/__hmr`;
+
+    this.socket = new WebSocket(socketUrl);
+
+    this.socket.addEventListener("open", () => {
+      this.isConnected = true;
+      logger.info("Connected to HMR server");
+    });
+
+    this.socket.addEventListener("message", ({ data }) => {
+      try {
+        const payload: HMRPayload = JSON.parse(data);
+        this.handleMessage(payload);
+      } catch (error) {
+        logger.error(`Failed to parse HMR message: ${error}`);
+      }
+    });
+
+    this.socket.addEventListener("close", () => {
+      this.isConnected = false;
+      logger.warn("HMR connection closed, attempting to reconnect...");
+      setTimeout(() => this.connect(), 1000);
+    });
+
+    this.socket.addEventListener("error", (err) => {
+      logger.error("HMR connection error");
+      console.error(err);
+    });
+  }
+
+  handleMessage(payload: HMRPayload): void {
+    logger.info(`Received HMR message: ${payload.type}`);
+
+    switch (payload.type) {
+      case "connected":
+        logger.info("HMR connection established");
+        break;
+
+      case "update":
+        if (payload.updates && payload.updates.length > 0) {
+          this.fetchUpdate(payload.updates)
+            .then((callback) => {
+              if (callback) {
+                callback();
+              }
+            })
+            .catch((err) => {
+              logger.error(`Error processing update: ${err}`);
+            });
+        }
+        break;
+
+      case "full-reload":
+        logger.info("Executing full reload");
+        location.reload();
+
+        break;
+
+      case "prune": {
+        if (payload.paths) {
+          this.prunePaths(payload.paths);
+        }
+        break;
+      }
+
+      case "error": {
+        if (payload.err) {
+          logger.error(`HMR error: ${payload.err.message}`);
+        }
+        break;
+      }
+    }
+  }
+
+  async fetchUpdate(updates: Update[]): Promise<(() => void) | null> {
+    const qualifiedCallbacks: ((data?: any) => void)[] = [];
+    logger.info(`Processing ${updates.length} updates`);
+
+    return () => {
+      logger.info(`Executing ${qualifiedCallbacks.length} update callbacks`);
+      for (const cb of qualifiedCallbacks) {
+        try {
+          cb();
+        } catch (e) {
+          logger.error(`${e}`);
+          return;
+        }
+      }
+    };
+  }
+
+  prunePaths(paths: string[]): void {
+    logger.info(`Pruning paths: ${paths.join(", ")}`);
+    paths.forEach((path) => {
+      const fn = this.pruneMap.get(path);
+      if (fn) {
+        fn(this.dataMap.get(path));
+      }
+      this.hotModulesMap.delete(path);
+      this.pruneMap.delete(path);
+      this.disposeMap.delete(path);
+      this.dataMap.delete(path);
+    });
+  }
+
+  sendCustomEvent(event: string, data: any = null): void {
+    if (this.socket && this.socket.readyState === 1) {
+      this.socket.send(
+        JSON.stringify({
+          type: "custom",
+          event,
+          data,
+        })
+      );
+    }
+  }
+}
+
+// 单例HMR客户端
+export const hmrClient = new HMRClient();
+
+export function createHotContext(ownerPath: string): HotContext {
+  return new HMRContext(hmrClient, ownerPath);
+}
+
+// 自动连接到HMR服务器
+hmrClient.connect();
+
+export function updateStyle(id: string, css: string, modulePath: string): void {
+  logger.info(`Updating style: ${modulePath}`);
+  let el = document.querySelector(`style[data-module-path="${modulePath}"]`);
+  if (!el) {
+    el = document.createElement("style");
+    el.id = `vite-css-${id}`;
+    el.setAttribute("type", "text/css");
+    (el as HTMLElement).dataset.modulePath = modulePath;
+    document.head.appendChild(el);
+  }
+  el.textContent = css;
+}
+
+export function removeStyle(id: string): void {
+  logger.info(`Removing style: ${id}`);
+  const el = document.querySelector(`style#vite-css-${id}`);
+  if (el) {
+    document.head.removeChild(el);
+  }
+}
+
+export default {
+  init: (port: number) => {
+    logger.info(`HMR client initialized, port: ${port}`);
+  },
+  createHotContext,
   updateStyle,
   removeStyle,
-  createHotContext,
 };
