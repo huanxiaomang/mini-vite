@@ -1,7 +1,5 @@
 # lite-vite
 
-如你所见，这是一个**限时挑战**——3 天时间复刻一个迷你版的 Vite，每一天只有一次 push，是一个颜文字。
-
 主要包含 `create-vite` 和 `lite-vite` 模块，使用 `esbuild` 预构建依赖，`rollup` 打包项目，实现了一些简单的 loader 去转换 `vue3`、`png`、`ts` 等资源。
 
 ## 最快速度体验 lite-vite
@@ -66,6 +64,7 @@ npx lite-vite help build
 - [x] 实现 plugin 处理 `public/` 目录
 - [x] 实现 `create-lite-vite` 脚手架
 
+
 ## 未实现功能
 
 或许以后有时间会做：
@@ -74,5 +73,7 @@ npx lite-vite help build
 - [ ] 实现 Vue 文件的 HMR
 - [ ] 支持加载 `vite.config.ts`
 - [ ] 支持传入 Rollup 插件
+- [ ] 实现 CSS HMR策略
+- [ ] 实现JS传播更新
 
 我会加油哒 (●• ̀ω•́ )✧
