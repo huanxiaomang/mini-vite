@@ -1,9 +1,17 @@
-import { join, resolve } from "node:path";
+import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { log } from "@lite-vite/shared";
 import esbuild from "esbuild";
 import picocolors from "picocolors";
 import { depCache, saveDepCache } from "./cache";
 import { CACHE_DIR, ROOT } from "./constant";
+
+const _require = createRequire(join(ROOT, "package.json"));
+
+function resolvePackageDir(pkgName: string): string {
+  const pkgJson = _require.resolve(`${pkgName}/package.json`);
+  return dirname(pkgJson);
+}
 
 export async function preBundleDependency(pkgName: string): Promise<string> {
   const cacheKey = pkgName;
@@ -12,18 +20,19 @@ export async function preBundleDependency(pkgName: string): Promise<string> {
   }
 
   log.debug(`Pre-bundling dependency: ${pkgName}`);
-  const entryPoint = resolve(ROOT, "node_modules", pkgName);
+  const pkgDir = resolvePackageDir(pkgName);
   const outFile = join(CACHE_DIR, `${pkgName}.js`);
 
   try {
     await esbuild.build({
-      entryPoints: [entryPoint],
+      entryPoints: [pkgName],
       bundle: true,
       outfile: outFile,
       format: "esm",
       platform: "browser",
       logLevel: "silent",
       write: true,
+      nodePaths: [dirname(pkgDir)],
     });
     depCache.set(cacheKey, outFile);
     await saveDepCache();
