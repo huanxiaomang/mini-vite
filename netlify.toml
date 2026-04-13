@@ -1,6 +1,6 @@
 [build]
 base = "packages/docs"
-publish = "packages/docs/.vitepress/dist"
+publish = ".vitepress/dist"
 command = "pnpm install --frozen-lockfile && pnpm run build"
 
 [build.environment]

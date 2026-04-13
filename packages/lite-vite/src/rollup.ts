@@ -30,9 +30,18 @@ function esbuildMinify(): Plugin {
   };
 }
 
+const BUILTIN_PLUGIN_NAMES = new Set([
+  "html-loader",
+  "css-loader",
+  "vue-loader",
+  "js-loader",
+  "ts-loader",
+  "image-loader",
+]);
+
 function adaptUserPlugins(userPlugins: PluginOption[]): Plugin[] {
   return userPlugins
-    .filter((p) => p.transform)
+    .filter((p) => p.transform && !BUILTIN_PLUGIN_NAMES.has(p.name))
     .map((p) => ({
       name: `user:${p.name}`,
       async transform(code: string, id: string) {

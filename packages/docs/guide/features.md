@@ -490,8 +490,6 @@ pnpm create lite-vite@latest
 
 `@lite-vite/eslint-config` 提供统一的代码规范配置。
 
-[详细文档 →](/advanced/eslint-config)
-
 ### 覆盖范围
 
 - TypeScript（`@typescript-eslint`）
