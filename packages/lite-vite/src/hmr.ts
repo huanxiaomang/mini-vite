@@ -210,6 +210,19 @@ export function setupHmr(
             },
           ],
         });
+      } else if (ext === ".vue") {
+        log.info(`Vue 文件已更改，发送组件热更新: ${modulePath}`);
+        sendUpdate({
+          type: "update",
+          updates: [
+            {
+              type: "js-update",
+              path: modulePath,
+              acceptedPath: modulePath,
+              timestamp: Date.now(),
+            },
+          ],
+        });
       } else if (
         ext === ".js" ||
         ext === ".jsx" ||
@@ -459,9 +472,6 @@ export async function handleHMRUpdate(
         importedModules: Array.from(module.importedModules).map((m) => m.file),
         isSelfAccepting: !!module.isSelfAccepting,
       })),
-      // 如果是b.ts被更新，特别检查是否有a.ts导入它
-      isSpecialCase:
-        normalizedFile.includes("/b.") || normalizedFile.endsWith("\\b."),
     };
 
     if (needFullReload || boundaries.size === 0) {
