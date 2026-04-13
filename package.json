@@ -8,7 +8,8 @@
   "author": "huanxiaomang",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "cd packages/shared && pnpm run build && cd ../lite-vite && pnpm run build && cd ../create-vite && pnpm run build"
   },
   "dependencies": {
     "@eslint/eslintrc": "^3.3.0",
