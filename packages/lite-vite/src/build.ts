@@ -22,9 +22,14 @@ export async function build(ctx: ViteContext): Promise<void> {
   const startTime = Date.now();
   log.info("Building for production...");
 
+  for (const p of ctx.plugins) {
+    if (p.buildStart) await p.buildStart();
+  }
+
   const outputDir = ctx.output ?? OUT_DIR;
   const entry = resolve(ROOT, ctx.entry);
   const hasTsConfig = existsSync(resolve(ROOT, "tsconfig.json"));
+  const minify = ctx.build?.minify ?? false;
   let htmlOutputPath: string | null = null;
   let entryFileName = "main";
   let input = entry;
@@ -41,7 +46,7 @@ export async function build(ctx: ViteContext): Promise<void> {
     input = result;
   }
 
-  const rollupOptions = getRollupOptions({ hasTsConfig, input });
+  const rollupOptions = getRollupOptions({ hasTsConfig, input, minify, userPlugins: ctx.plugins });
   const format = ctx.format ?? "esm";
   const outputOptions: OutputOptions = {
     dir: outputDir,
@@ -64,6 +69,14 @@ export async function build(ctx: ViteContext): Promise<void> {
     }
 
     await copyFiles(resolve(ROOT, "public"), outputDir);
+
+    for (const p of ctx.plugins) {
+      if (p.writeBundle) await p.writeBundle();
+    }
+
+    for (const p of ctx.plugins) {
+      if (p.buildEnd) await p.buildEnd();
+    }
 
     const buildTimeMs = Date.now() - startTime;
     log.info(picocolors.green(`\u2713 Built in ${(buildTimeMs / 1000).toFixed(2)}s`));

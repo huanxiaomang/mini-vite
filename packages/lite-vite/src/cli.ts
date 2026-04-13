@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { exec } from "node:child_process";
 import { log } from "@lite-vite/shared";
 import { program } from "commander";
 import pkg from "../package.json" assert { type: "json" };
@@ -15,6 +16,11 @@ async function main() {
   }
 }
 
+function openBrowser(url: string) {
+  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+  exec(`${cmd} ${url}`);
+}
+
 async function registerCommands() {
   program
     .name(Object.keys(pkg.bin)[0])
@@ -26,13 +32,29 @@ async function registerCommands() {
     .description("启动 Vite 开发服务器")
     .option("-p, --port <number>", "指定服务器端口号", Number.parseInt)
     .action(async (options) => {
-      log.info(`Vite v${pkg.version}`);
       const entry = resolve(process.cwd(), "index.html");
       const ctx = await loadOptions({
         entry,
         port: options.port || undefined,
       });
-      await startDevServer(ctx);
+
+      if (ctx.clearScreen !== false) {
+        process.stdout.write("\x1Bc");
+      }
+
+      log.info(`Vite v${pkg.version}`);
+
+      for (const p of ctx.plugins) {
+        if (p.configResolved) p.configResolved(ctx);
+      }
+
+      const server = await startDevServer(ctx);
+      const port = ctx.port || 4000;
+      const host = ctx.server?.host || "localhost";
+
+      if (ctx.server?.open) {
+        openBrowser(`http://${host}:${port}`);
+      }
     });
 
   program
@@ -43,7 +65,6 @@ async function registerCommands() {
     .option("-f, --format <format>", "指定输出格式 (esm 或 cjs)")
     .option("-s, --sourcemap", "启用源映射")
     .action(async (options) => {
-      log.info(`Vite v${pkg.version} - Building...`);
       const entry = resolve(process.cwd(), options.entry || "index.html");
       const ctx = await loadOptions({
         entry,
@@ -51,6 +72,17 @@ async function registerCommands() {
         format: options.format || undefined,
         sourcemap: options.sourcemap ?? undefined,
       });
+
+      if (ctx.clearScreen !== false) {
+        process.stdout.write("\x1Bc");
+      }
+
+      log.info(`Vite v${pkg.version} - Building...`);
+
+      for (const p of ctx.plugins) {
+        if (p.configResolved) p.configResolved(ctx);
+      }
+
       await build(ctx);
     });
 

@@ -8,7 +8,14 @@ export default defineConfig([
     format: ["cjs"],
     splitting: false,
     clean: false,
-    dts: true,
+    dts: false,
+    external: ["sourcemap", "rollup"],
+  },
+  {
+    entry: ["index.ts"],
+    format: ["cjs"],
+    outDir: "dist",
+    dts: { only: true },
     external: ["sourcemap", "rollup"],
   },
   {

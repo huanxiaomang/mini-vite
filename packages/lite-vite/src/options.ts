@@ -21,7 +21,7 @@ async function loadConfigFile(): Promise<UserConfig | null> {
     const filePath = resolve(ROOT, file);
     if (!existsSync(filePath)) continue;
 
-    log.debug(`\u52A0\u8F7D\u914D\u7F6E\u6587\u4EF6: ${filePath}`);
+    log.debug(`加载配置文件: ${filePath}`);
 
     try {
       const ext = extname(file);
@@ -53,7 +53,9 @@ async function loadConfigFile(): Promise<UserConfig | null> {
       const mod = await import(`${fileUrl}?t=${Date.now()}`);
       return mod.default || mod;
     } catch (err: any) {
-      log.warn(`\u52A0\u8F7D\u914D\u7F6E\u6587\u4EF6\u5931\u8D25: ${file} - ${err.message}`);
+      log.error(`加载配置文件失败: ${file}`);
+      log.error(err.message);
+      if (err.stack) log.debug(err.stack);
       return null;
     }
   }
@@ -77,6 +79,14 @@ export const loadOptions = async (
     if (fileConfig.format && !cliOptions.format) merged.format = fileConfig.format;
     if (fileConfig.build?.format && !cliOptions.format) merged.format = fileConfig.build.format;
     if (fileConfig.entry) merged.entry = resolve(ROOT, fileConfig.entry);
+    if (fileConfig.logLevel) merged.logLevel = fileConfig.logLevel;
+    if (fileConfig.clearScreen !== undefined) merged.clearScreen = fileConfig.clearScreen;
+    if (fileConfig.server?.open !== undefined) {
+      merged.server = { ...merged.server, open: fileConfig.server.open };
+    }
+    if (fileConfig.server?.host) {
+      merged.server = { ...merged.server, host: fileConfig.server.host };
+    }
     if (fileConfig.build) {
       merged.build = {
         ...merged.build,

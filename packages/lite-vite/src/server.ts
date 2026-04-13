@@ -22,6 +22,7 @@ export async function startDevServer(
   ctx: ViteContext
 ): Promise<ServerInstance> {
   log.debug("Starting dev server...");
+  log.debug(`已加载 ${ctx.plugins.length} 个插件: ${ctx.plugins.map((p) => p.name).join(", ")}`);
   await loadDepCache();
 
   // 创建模块依赖图

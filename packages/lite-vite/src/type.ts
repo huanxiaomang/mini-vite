@@ -20,9 +20,14 @@ export interface RequestContext {
   isModuleRequest: boolean;
 }
 
+export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
+
 export interface PluginOption {
   name: string;
-  writeBundle?: () => void;
+  buildStart?: () => void | Promise<void>;
+  buildEnd?: () => void | Promise<void>;
+  writeBundle?: () => void | Promise<void>;
+  configResolved?: (config: ViteContext) => void;
   transform?: (
     content: string | Buffer,
     filePath: string,
@@ -47,6 +52,8 @@ export interface UserConfig {
   output?: string;
   sourcemap?: boolean;
   format?: "esm" | "cjs";
+  logLevel?: LogLevel;
+  clearScreen?: boolean;
   server?: {
     port?: number;
     open?: boolean;
@@ -78,6 +85,12 @@ export interface NativeViteOptions {
   output?: string;
   sourcemap?: boolean;
   format?: "esm" | "cjs";
+  logLevel?: LogLevel;
+  clearScreen?: boolean;
+  server?: {
+    open?: boolean;
+    host?: string;
+  };
   build?: {
     outdir: string;
     minify?: boolean;

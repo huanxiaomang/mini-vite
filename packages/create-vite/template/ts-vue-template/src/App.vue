@@ -8,42 +8,35 @@ export default {
       count: ref(0)
     }
   },
-  mounted() {
-    console.error(123, 3455)
-  }
 }
 </script>
 
 <template>
   <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="./vite.svg" class="logo" alt="Vite logo" />
+    <a href="https://github.com/user/lite-vite" target="_blank">
+      <img src="./vite.svg" class="logo" alt="Lite Vite logo" />
     </a>
     <a href="https://vuejs.org/" target="_blank">
       <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
     </a>
   </div>
-  <h1>Vite + Vue</h1>
+  <h1>Lite Vite + Vue</h1>
 
   <div class="card">
     <button type="button" @click="count++">count is {{ count }}</button>
   </div>
 
   <p>
-    Check out
-    <a href="https://vuejs.org/guide/quick-start.html#local" target="_blank"
-      >create-vue</a
-    >, the official Vue + Vite starter
+    由
+    <a href="https://github.com/user/lite-vite" target="_blank">Lite Vite</a>
+    驱动的 Vue 3 + TypeScript 项目
   </p>
   <p>
-    Learn more about IDE Support for Vue in the
-    <a
-      href="https://vuejs.org/guide/scaling-up/tooling.html#ide-support"
-      target="_blank"
-      >Vue Docs Scaling up Guide</a
-    >.
+    查看
+    <a href="https://vuejs.org/guide/scaling-up/tooling.html#ide-support" target="_blank">Vue 文档</a>
+    了解更多
   </p>
-  <p class="read-the-docs">Click on the Vite and Vue logos to learn more</p>
+  <p class="read-the-docs">点击 Logo 了解更多</p>
 </template>
 
 <style scoped>

@@ -9,6 +9,7 @@
     "dist"
   ],
   "main": "index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "lite-vite": "./bin/cli"
   },

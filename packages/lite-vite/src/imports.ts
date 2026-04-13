@@ -45,6 +45,10 @@ export async function rewriteImports(
       if (isStaticAsset || isCssFile) {
         rewrittenPath += "?import";
       }
+    } else if (ext && !CODE_EXTENSIONS.includes(ext)) {
+      const resolvedPath = resolve(dirname(filePath), importPath);
+      rewrittenPath = normalizeImportPath(relative(ROOT, resolvedPath));
+      rewrittenPath += "?import";
     } else {
       const pkgName = importPath.split("/")[0];
       const cachedPath =

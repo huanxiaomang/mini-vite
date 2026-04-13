@@ -9,6 +9,7 @@ export const MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".txt": "text/plain",
 };
 
 export const getMimeType = (ext: string): string =>
@@ -22,6 +23,7 @@ export const TEXT_EXTENSIONS = [
   ".css",
   ".json",
   ".svg",
+  ".txt",
 ];
 export const BINARY_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 export const IMG_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"];
