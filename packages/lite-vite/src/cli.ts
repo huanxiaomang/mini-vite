@@ -30,7 +30,7 @@ async function registerCommands() {
       const entry = resolve(process.cwd(), "index.html");
       const ctx = await loadOptions({
         entry,
-        port: options.port,
+        port: options.port || undefined,
       });
       await startDevServer(ctx);
     });
@@ -39,17 +39,17 @@ async function registerCommands() {
     .command("build")
     .description("构建生产包")
     .option("--no-optimize", "禁用优化")
-    .option("-o, --output <path>", "指定输出目录", "dist")
-    .option("-f, --format <format>", "指定输出格式 (esm 或 cjs)", "esm")
-    .option("-s, --sourcemap", "启用源映射", false)
+    .option("-o, --output <path>", "指定输出目录")
+    .option("-f, --format <format>", "指定输出格式 (esm 或 cjs)")
+    .option("-s, --sourcemap", "启用源映射")
     .action(async (options) => {
       log.info(`Vite v${pkg.version} - Building...`);
       const entry = resolve(process.cwd(), options.entry || "index.html");
       const ctx = await loadOptions({
         entry,
-        output: resolve(process.cwd(), options.output),
-        format: options.format as "esm" | "cjs",
-        sourcemap: options.sourcemap,
+        output: options.output ? resolve(process.cwd(), options.output) : undefined,
+        format: options.format || undefined,
+        sourcemap: options.sourcemap ?? undefined,
       });
       await build(ctx);
     });

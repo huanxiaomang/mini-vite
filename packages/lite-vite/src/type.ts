@@ -40,6 +40,37 @@ export interface TransformResult {
   map: RawSourceMap | null;
 }
 
+export interface UserConfig {
+  entry?: string;
+  port?: number;
+  plugins?: PluginOption[];
+  output?: string;
+  sourcemap?: boolean;
+  format?: "esm" | "cjs";
+  server?: {
+    port?: number;
+    open?: boolean;
+    host?: string;
+  };
+  build?: {
+    outdir?: string;
+    minify?: boolean;
+    sourcemap?: boolean;
+    format?: "esm" | "cjs";
+    rollupOptions?: RollupOptions;
+    lib?: {
+      entry: string;
+      name: string;
+      fileName: string;
+    };
+  };
+  resolve?: {
+    alias?: Record<string, string>;
+    extensions?: string[];
+  };
+  define?: Record<string, string>;
+}
+
 export interface NativeViteOptions {
   entry: string;
   port?: number;
@@ -57,6 +88,11 @@ export interface NativeViteOptions {
       fileName: string;
     };
   };
+  resolve?: {
+    alias?: Record<string, string>;
+    extensions?: string[];
+  };
+  define?: Record<string, string>;
 }
 
 export type ViteOptions = Omit<NativeViteOptions, "entry">;
