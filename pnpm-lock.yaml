@@ -169,6 +169,9 @@ importers:
 
   packages/lite-vite:
     dependencies:
+      '@lite-vite/report':
+        specifier: workspace:*
+        version: link:../report
       '@rollup/plugin-image':
         specifier: ^3.0.3
         version: 3.0.3(rollup@4.34.8)
@@ -199,6 +202,22 @@ importers:
       rollup-plugin-vue:
         specifier: ^6.0.0
         version: 6.0.0(@vue/compiler-sfc@3.5.13)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
+
+  packages/report:
+    dependencies:
+      '@lite-vite/shared':
+        specifier: workspace:*
+        version: link:../shared
+      commander:
+        specifier: ^13.1.0
+        version: 13.1.0
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
+    devDependencies:
       typescript:
         specifier: ^5.7.3
         version: 5.7.3

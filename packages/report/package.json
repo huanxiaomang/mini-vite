@@ -1,0 +1,28 @@
+{
+  "name": "@lite-vite/report",
+  "version": "1.0.0",
+  "description": "Lite Vite 构建分析报告生成工具",
+  "keywords": [],
+  "license": "ISC",
+  "author": "huanxiaomang",
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "lite-report": "./bin/cli.js"
+  },
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup --minify"
+  },
+  "dependencies": {
+    "@lite-vite/shared": "workspace:*",
+    "commander": "^13.1.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

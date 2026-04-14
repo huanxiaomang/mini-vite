@@ -7,7 +7,7 @@ import picocolors from "picocolors";
 import { OUT_DIR, ROOT } from "./constant";
 import { extractEntryFromHtml, updateHtmlScript } from "./utils/index";
 import { getRollupOptions } from "./rollup";
-import { generateReport, type FileInfo } from "./report/index";
+import { generateReport, type FileInfo } from "@lite-vite/report";
 import type { ViteContext } from "./type";
 
 function formatBytes(bytes: number): string {

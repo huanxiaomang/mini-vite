@@ -20,6 +20,7 @@
     "release": "release-it"
   },
   "dependencies": {
+    "@lite-vite/report": "workspace:*",
     "@rollup/plugin-image": "^3.0.3",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-replace": "^6.0.2",

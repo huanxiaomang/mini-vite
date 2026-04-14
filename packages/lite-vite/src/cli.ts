@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { existsSync } from "node:fs";
 import { exec } from "node:child_process";
 import { log } from "@lite-vite/shared";
 import { program } from "commander";
@@ -6,6 +7,7 @@ import pkg from "../package.json" assert { type: "json" };
 import { startDevServer } from "./server";
 import { build } from "./build";
 import { loadOptions } from "./options";
+import { analyzeDir, generateReport } from "@lite-vite/report";
 
 async function main() {
   try {
@@ -84,6 +86,41 @@ async function registerCommands() {
       }
 
       await build(ctx);
+    });
+
+  program
+    .command("report")
+    .description("分析构建产物并打开可视化报告")
+    .option("-d, --dir <path>", "构建产物目录", "dist")
+    .option("--no-open", "生成报告但不自动打开浏览器")
+    .action(async (options) => {
+      const outputDir = resolve(process.cwd(), options.dir);
+
+      if (!existsSync(outputDir)) {
+        log.error(`构建产物目录不存在: ${outputDir}`);
+        log.info("请先运行 lite-vite build 进行构建");
+        process.exit(1);
+      }
+
+      log.info(`正在分析构建产物: ${outputDir}`);
+
+      const { files, totalTime } = await analyzeDir(outputDir);
+
+      if (files.length === 0) {
+        log.warn("未在目录中找到任何产物文件");
+        process.exit(0);
+      }
+
+      log.info(`扫描到 ${files.length} 个文件`);
+
+      const entry = resolve(process.cwd(), "index.html");
+      await generateReport(outputDir, files, totalTime, entry, "esm");
+
+      const reportPath = join(outputDir, "build-report.html");
+      if (options.open !== false) {
+        log.info("正在打开构建报告...");
+        openBrowser(reportPath);
+      }
     });
 
   program.on("command:*", (cmds) => {
