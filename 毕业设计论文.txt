@@ -1,0 +1,1020 @@
+题目名称：基于 esbuild+Rollup 的现代前端构建工具链的设计与实现
+
+摘    要：
+随着前端工程化的深入发展，以 webpack 为代表的传统构建工具在面对日益庞大的前端项目时暴露出冷启动慢、热更新退化、配置繁琐、产物臃肿等严重问题。本文设计并实现了一套名为 Lite Vite 的现代前端构建工具链，采用浏览器原生 ES Module 按需编译的架构理念，从根本上解决了传统打包工具的性能瓶颈。工具链采用 pnpm Monorepo 架构组织，由核心构建工具 lite-vite、项目脚手架 create-lite-vite、构建分析报告 @lite-vite/report、共享工具库 @lite-vite/shared、ESLint 预设配置 @lite-vite/eslint-config、VitePress 文档站 @lite-vite/docs 以及 Slidev 演示文稿 @lite-vite/ppt 共 8 个包协作组成。核心构建工具实现了基于原生 HTTP 的开发服务器（按需编译、插件 transform 管道）、基于 WebSocket 和模块依赖图 BFS 传播算法的精准 HMR 热更新、基于 esbuild 的依赖预打包与缓存机制、基于 Rollup 的生产构建与代码压缩，以及覆盖 HTML/CSS/JavaScript/TypeScript/Vue SFC/图片的内置插件系统。经测试验证，该工具链开发服务器可实现秒级冷启动，热更新延迟稳定在毫秒级别，生产构建产物通过 Rollup tree-shaking 显著小于 webpack 产物，且整个工具链开箱即用、零配置即可运行，为前端开发者提供了从项目创建到构建分析的一站式解决方案。
+
+关键词：前端构建工具链；ES Module；esbuild；Rollup；热模块替换；pnpm Monorepo
+
+
+Abstract：
+With the deepening of front-end engineering, traditional build tools represented by webpack have exposed serious problems such as slow cold start, degraded hot update, cumbersome configuration, and bloated output when facing increasingly large front-end projects. This paper designs and implements a modern front-end build toolchain named Lite Vite, which adopts the architecture concept of on-demand compilation based on native browser ES Module, fundamentally solving the performance bottleneck of traditional bundlers. The toolchain is organized using pnpm Monorepo architecture, consisting of 8 packages: core build tool lite-vite, project scaffolding create-lite-vite, build analysis report @lite-vite/report, shared utility library @lite-vite/shared, ESLint preset @lite-vite/eslint-config, VitePress documentation site @lite-vite/docs, and Slidev presentation @lite-vite/ppt. The core build tool implements an HTTP-based dev server with on-demand compilation and plugin transform pipeline, precise HMR hot update based on WebSocket and module dependency graph BFS propagation algorithm, dependency pre-bundling with esbuild and caching mechanism, production build with Rollup and code minification, and a built-in plugin system covering HTML/CSS/JavaScript/TypeScript/Vue SFC/images. Testing shows that the toolchain achieves second-level cold start, millisecond-level HMR latency, significantly smaller production output than webpack through Rollup tree-shaking, and works out-of-the-box with zero configuration, providing front-end developers with a one-stop solution from project creation to build analysis.
+
+Keywords: Front-end build toolchain; ES Module; esbuild; Rollup; Hot Module Replacement; pnpm Monorepo
+
+
+目    录
+摘    要	I
+Abstract	II
+第1章  概述	1
+1.1  课题的背景	1
+1.2  国内外研究现状	1
+1.3  目的及意义	2
+1.4  设计的指导思想	3
+第2章  方案论证	4
+2.1  可行性分析	4
+2.1.1  经济可行性	4
+2.1.2  技术可行性	4
+2.1.3  操作可行性	6
+2.1.4  法律可行性	6
+2.2  相关技术简介	6
+第3章  需求分析	10
+3.1  用户需求分析	10
+3.2  系统功能分析	11
+3.3  系统性能分析	12
+3.4  系统架构分析	12
+3.5  系统流程分析	14
+第4章  设计论述	18
+4.1  概要设计	18
+4.2  核心模块详细设计	19
+4.3  内置插件设计	30
+4.4  工具链配套包设计	34
+4.5  用户自定义插件示例	38
+第5章  系统测试	40
+5.1  单元测试（白盒测试）	40
+5.2  功能测试（黑盒测试）	44
+结    论	49
+致    谢	50
+参考文献	51
+
+
+第1章  概述
+
+1.1  课题的背景
+
+随着互联网技术的飞速发展，前端应用的复杂度呈爆炸式增长。现代前端项目通常包含数千个模块文件，涉及 TypeScript、Vue 单文件组件、CSS 预处理器、图片资源等多种文件类型。在这一背景下，前端构建工具成为开发流程中不可或缺的基础设施。
+
+以 webpack 为代表的传统构建工具自 2012 年发布以来，主导了前端工程化领域近十年[1]。webpack 的核心思想是将所有资源视为模块，通过 loader 链进行转换，最终打包为浏览器可执行的 bundle。这一架构在早期有效解决了模块化和资源管理问题，但随着项目规模的增长，其先天设计缺陷愈发明显：冷启动需要遍历整个依赖树并全量打包，中大型项目启动时间可达 30 秒至数分钟；热模块替换（HMR）需要重新编译受影响的 chunk，延迟随模块数增长而退化；配置复杂度高，一个典型项目需要十余个 loader 和 plugin 的繁琐配置[2]。
+
+与此同时，现代浏览器已全面支持 ES Module（ESM）标准[3]，通过 <script type="module"> 可以直接加载 ESM 格式的 JavaScript 模块。这为构建工具提供了全新的架构可能——在开发阶段利用浏览器原生模块加载能力，跳过打包步骤，按需编译浏览器实际请求的模块。esbuild[4] 和 Rollup[5] 等新一代编译/打包工具的成熟，也为高性能构建提供了坚实的技术基础。
+
+基于上述背景，本文设计并实现了一套名为 Lite Vite 的现代前端构建工具链，旨在从架构层面解决传统构建工具的性能瓶颈，为前端开发者提供极速的开发体验和高效的生产构建能力。
+
+1.2  国内外研究现状
+
+在国际上，前端构建工具经历了从任务运行器到模块打包器的演进。早期的 Grunt（2012）和 Gulp（2013）作为任务运行器，主要通过配置文件定义文件处理流水线[6]。2012 年 webpack 的发布标志着模块打包时代的到来，它引入了 loader 和 plugin 机制，支持代码分割和动态导入，成为前端构建的事实标准[1]。2017 年 Parcel 提出了零配置打包的理念，试图降低构建工具的使用门槛[7]。
+
+近年来，新一代构建工具开始围绕性能和开发体验进行创新。2020 年 esbuild 发布，使用 Go 语言编写，编译速度比传统 JavaScript 编译器快 10-100 倍[4]。Rollup 则专注于 ES Module 打包，其基于 ESM 的静态分析能力使 tree-shaking 更加彻底[5]。SWC（Speedy Web Compiler）使用 Rust 编写，同样追求极致的编译性能[8]。
+
+在构建工具链方面，unbuild 提供了统一的库打包体验，turbopack 尝试使用 Rust 重写构建核心[9]。但这些工具大多专注于打包环节，缺少开发服务器、HMR、项目脚手架等完整的工具链支持。
+
+在国内，前端工程化研究主要集中在构建优化策略方面。部分研究针对 webpack 的 DLL Plugin、ModuleFederationPlugin 等特性进行了性能优化探索[10]。但从架构层面重新设计构建工具链，利用原生 ESM 实现按需编译的研究相对较少。
+
+1.3  目的及意义
+
+本文的研究目的是设计并实现一套完整的现代前端构建工具链——Lite Vite，解决传统构建工具的以下核心痛点：
+
+（1）冷启动慢：传统工具需全量打包后才能启动开发服务器，项目越大启动越慢。Lite Vite 利用原生 ESM 按需编译，启动速度与项目大小无关，始终保持秒级。
+
+（2）HMR 退化：传统工具的热更新需重新打包受影响的 chunk，随项目增长越来越慢。Lite Vite 基于模块依赖图的 BFS 传播算法，实现模块级精准更新，延迟始终保持毫秒级。
+
+（3）配置繁琐：传统工具需要大量 loader/plugin 配置。Lite Vite 内置 TypeScript、Vue SFC、CSS、图片处理，开箱即用，零配置即可运行。
+
+（4）产物臃肿：传统工具的产物包含模块运行时代码，tree-shaking 能力有限。Lite Vite 使用 Rollup 进行生产构建，天然支持 tree-shaking，产物更加精简。
+
+（5）工具链分散：开发者需要自行组合多个工具。Lite Vite 提供从项目创建（脚手架）到开发（dev server）、构建（Rollup）、分析（报告）的一站式解决方案。
+
+本项目的意义在于：一方面为前端开发者提供高效实用的构建工具，显著提升开发效率；另一方面通过实现完整的构建工具链，深入理解现代前端构建的核心原理，包括 ESM 模块加载、HMR 热更新传播、依赖预打包、代码转换管道等关键技术。
+
+1.4  设计的指导思想
+
+本工具链的设计遵循以下核心思想：
+
+（1）原生 ESM 优先：开发阶段不打包，利用浏览器原生 ES Module 支持按需编译，最大化利用浏览器的模块加载能力。
+
+（2）按需编译：所有源文件的编译转换都在浏览器实际请求时才进行，未访问的模块零开销。
+
+（3）插件化架构：通过统一的插件接口（PluginOption）实现文件转换管道，内置插件和用户插件共享同一套 API，开发与构建阶段行为一致。
+
+（4）Monorepo 组织：采用 pnpm Workspace 管理多包结构，各包职责单一、依赖清晰，既可整体使用也可独立发布。
+
+（5）约定优于配置：提供合理的默认行为，大部分场景下零配置即可运行，同时保留完整的配置能力供高级用户使用。
+
+
+第2章  方案论证
+
+2.1  可行性分析
+
+2.1.1  经济可行性
+
+本工具链的开发完全基于开源技术栈，所有依赖均为免费开源软件：Node.js 作为运行环境、TypeScript 作为开发语言、esbuild 和 Rollup 作为编译/打包引擎、pnpm 作为包管理器。开发环境仅需一台普通计算机即可完成全部开发和测试工作，无需额外的硬件或软件购买费用。项目最终以 MIT 许可证开源发布，不涉及任何商业授权成本。因此，本项目在经济可行性方面完全满足要求。
+
+2.1.2  技术可行性
+
+本工具链涉及的核心技术均已成熟并被广泛应用于工业界：
+
+1、Node.js 运行时
+Node.js 是基于 Chrome V8 引擎构建的 JavaScript 运行环境[11]，自 2009 年发布以来已成为前端工程化的基础平台。本项目要求 Node.js >= 18，该版本提供了稳定的 ES Module 支持、原生 fetch API、以及性能优化的文件系统操作。Node.js 的 HTTP 模块可用于构建开发服务器，其事件驱动的非阻塞 I/O 模型非常适合处理并发的模块请求。
+
+2、esbuild 编译器
+esbuild 是由 Evan Wallace 使用 Go 语言开发的极速 JavaScript/TypeScript 编译器[4]。其编译速度比传统的 TypeScript 编译器（tsc）快 20-30 倍，比 Babel 快 10-100 倍。在本工具链中，esbuild 承担两项关键任务：开发阶段的 TypeScript 即时转译（仅做语法转换，不做类型检查）以及第三方依赖的预打包（将 CommonJS 模块转为 ESM 格式）。esbuild 已在众多生产项目中得到验证，技术成熟度高。
+
+3、Rollup 打包器
+Rollup 是一个面向 ES Module 的 JavaScript 模块打包器[5]，由 Rich Harris 创建。与 webpack 不同，Rollup 从设计之初就基于 ESM 标准，其静态分析能力使 tree-shaking 更加彻底，生成的产物不包含模块加载运行时代码，体积更小。在本工具链中，Rollup 用于生产环境构建，配合 @rollup/plugin-node-resolve、rollup-plugin-vue、rollup-plugin-postcss 等插件实现完整的打包能力。
+
+4、WebSocket 协议
+WebSocket 提供了浏览器与服务器之间的全双工实时通信通道[12]。在本工具链中，WebSocket 用于 HMR 热更新的消息推送——服务端检测到文件变更后，通过 WebSocket 向浏览器客户端发送精确的更新指令（js-update、css-update、full-reload 等），客户端根据指令执行相应的模块更新操作。本项目使用 ws 库实现 WebSocket 服务端。
+
+5、@vue/compiler-sfc
+@vue/compiler-sfc 是 Vue 3 官方提供的单文件组件编译器[13]，可以将 .vue 文件解析为 descriptor（包含 template、script、style 三个块），并分别编译为 JavaScript 代码。在本工具链中，vue-loader 插件利用该编译器实现 Vue SFC 的开发阶段即时编译和生产阶段 Rollup 打包。
+
+6、es-module-lexer 与 magic-string
+es-module-lexer 是一个高性能的 ES Module 词法分析器[14]，可以快速解析 JavaScript 代码中的 import/export 语句位置。magic-string[15] 是一个高效的字符串操作库，支持精准的子串替换而不影响其他位置。两者配合使用，实现了本工具链的导入路径重写功能——在不解析完整 AST 的情况下，快速定位并重写模块导入路径。
+
+7、pnpm Workspace
+pnpm 是新一代 Node.js 包管理器[16]，其内容寻址存储机制显著减少磁盘占用，严格的依赖解析避免了幽灵依赖问题。pnpm Workspace 功能支持在单个仓库中管理多个包，通过 workspace:* 协议自动建立包之间的符号链接，非常适合 Monorepo 架构的项目组织。
+
+综上所述，本项目所涉及的所有技术均已成熟可用，技术可行性论述通过。
+
+2.1.3  操作可行性
+
+本工具链面向前端开发者设计，操作流程简单直观：通过 pnpm create lite-vite 命令交互式创建项目；通过 lite-vite dev 一键启动开发服务器；通过 lite-vite build 一键完成生产构建；通过 lite-vite report 一键生成构建分析报告。CLI 命令设计遵循前端开发者的使用习惯，学习成本极低。配置文件为可选项，大部分场景下零配置即可运行。因此，本系统的操作可行性论述通过。
+
+2.1.4  法律可行性
+
+本项目在开发过程中完全独立完成，所使用的 Node.js、esbuild、Rollup、TypeScript、pnpm 等工具均为开源软件，遵循 MIT 或 Apache 2.0 等宽松开源许可证。项目本身以 ISC 许可证开源发布，不侵犯任何组织或个人的知识产权。所有参考资料和技术方案均在论文中明确标注来源。因此，本系统的法律可行性论述通过。
+
+2.2  相关技术简介
+
+本工具链的技术选型围绕"开发阶段不打包、生产阶段高效打包"这一核心理念展开，整体技术架构可以划分为四层：模块标准层、编译打包层、通信与运行时层、工程管理层。
+
+在模块标准层，整个工具链的架构基石是 ES Module（ESM）——ECMAScript 2015 引入的官方模块系统标准[3]。ESM 使用 import/export 语法声明模块关系，与 CommonJS 的 require/module.exports 不同，ESM 的导入声明是静态的，必须位于模块顶层，导入路径不能在运行时动态计算。这一特性使得构建工具无需执行代码即可进行精确的依赖分析和 tree-shaking。更关键的是，现代浏览器已通过 <script type="module"> 原生支持 ESM 加载——浏览器遇到 import 语句会自动发起 HTTP 请求获取模块。Lite Vite 的开发服务器正是利用这一机制，拦截浏览器的模块请求并按需编译返回，从而跳过了传统工具的全量打包步骤。
+
+在编译打包层，工具链采用"开发用 esbuild，生产用 Rollup"的双引擎策略。esbuild[4] 是使用 Go 语言编写的极速编译器，得益于 Go 的原生并行处理能力和编译型语言的性能优势，其编译速度比传统 JavaScript 编译器（如 tsc、Babel）快 10-100 倍。本工具链在开发阶段利用 esbuild 对 TypeScript 进行即时转译（仅做语法转换，不做类型检查，保证毫秒级响应）、对第三方 npm 依赖进行预打包（将 CommonJS 转为 ESM 并合并子模块）、在生产构建时作为代码压缩引擎。Rollup[5] 则是一个从设计之初就面向 ESM 的打包器，其产物不包含模块加载运行时代码（如 webpack 的 __webpack_require__），tree-shaking 基于 ESM 静态分析，能更彻底地消除未使用代码。生产构建时 Rollup 配合 node-resolve、vue、postcss、typescript、image 等社区插件组成完整的打包管道。对于 Vue 单文件组件的编译，则使用 Vue 官方提供的 @vue/compiler-sfc[13]，它可以将 .vue 文件解析为 descriptor 并分别编译 template（转为渲染函数）、script（支持 <script setup>）和 style（支持 scoped CSS）三个块。在导入路径的分析与重写方面，采用 es-module-lexer[14]（基于 WebAssembly 的高性能词法分析器）快速提取 import 语句的位置信息，配合 magic-string[15]（高效字符串操作库）进行精准的路径替换，无需构建完整 AST 即可完成重写。
+
+在通信与运行时层，HMR 热更新系统依赖 WebSocket 协议[12]实现服务端与浏览器之间的实时双向通信。服务端使用 ws 库创建 WebSocket 服务，文件变更时通过该通道向浏览器推送精确的更新指令（js-update、css-update、full-reload 等）。文件系统监听则使用 chokidar 库，它是 Node.js 生态中最成熟的文件监听方案，能够屏蔽不同操作系统的文件事件差异。开发服务器基于 Node.js[11] 原生 HTTP 模块构建，其事件驱动的非阻塞 I/O 模型非常适合处理大量并发的模块请求，配合 sirv 库提供 public 目录的静态文件服务。
+
+在工程管理层，整个工具链采用 pnpm Workspace[16] 管理 Monorepo 结构。pnpm 的内容寻址存储机制显著减少磁盘占用，严格的依赖解析杜绝了幽灵依赖问题。通过 pnpm-workspace.yaml 配置文件声明包目录，各包之间使用 workspace:* 协议引用，开发时自动建立符号链接，发布时自动替换为实际版本号。所有包使用 tsup（基于 esbuild 的 TypeScript 库打包工具）进行构建，配套 Vitest[17] 进行单元测试。文档站使用 VitePress[18] 构建并通过 Netlify 自动部署，演示文稿使用 Slidev[19] 制作。
+
+
+第3章  需求分析
+
+3.1  用户需求分析
+
+本工具链的目标用户是前端开发者，其核心需求包括：
+
+（1）快速启动：开发者希望启动开发服务器后能立即进行开发工作，不愿等待漫长的项目编译过程。
+（2）即时反馈：修改代码后，希望能在毫秒级别看到修改效果，且尽可能保留页面状态。
+（3）零配置：希望常见文件类型（TypeScript、Vue、CSS、图片）能开箱即用，不需要逐个配置 loader。
+（4）高质量产物：生产构建的产物应尽可能小，tree-shaking 应尽可能彻底。
+（5）构建可观测：希望能直观了解构建产物的体积分布、模块组成、是否存在重复依赖等信息。
+（6）可扩展性：希望能通过插件机制扩展构建工具的能力，支持自定义文件类型处理。
+（7）项目创建便捷：希望能通过一行命令快速创建包含最佳实践的项目模板。
+
+图3-1  前端开发者用例图
+【图：展示开发者与系统的交互关系——创建项目、启动开发、修改代码（触发 HMR）、构建生产产物、查看构建报告、编写自定义插件】
+
+3.2  系统功能分析
+
+根据用户需求分析，本工具链需要实现以下功能模块：
+
+（1）开发服务器功能
+开发服务器是工具链的核心，需要实现以下能力：基于原生 HTTP 的模块请求拦截与按需编译；插件 transform 管道对不同文件类型进行转换（HTML 注入 HMR 脚本、CSS 转 JS 模块、Vue SFC 编译、TypeScript esbuild 转译、图片资源处理）；静态资源服务（public 目录）；模块依赖图构建与维护。
+
+（2）热模块替换功能
+HMR 需要实现以下能力：通过 chokidar 监听文件系统变更；通过 WebSocket 与浏览器客户端建立实时通信；基于模块依赖图的 BFS 向上传播算法寻找 HMR 边界；针对不同文件类型执行不同的更新策略（CSS 样式替换、JS 模块重载、Vue 组件热更新、HTML 全页刷新）；链失活机制清除受影响模块的缓存。
+
+（3）依赖预打包功能
+需要自动检测代码中的裸模块导入（如 import { ref } from 'vue'），使用 esbuild 将第三方依赖预编译为 ESM 格式的单文件，并缓存到 node_modules/.lite-vite/ 目录下，附带 metadata.json 记录依赖映射关系。
+
+（4）生产构建功能
+需要使用 Rollup 进行生产打包，支持 HTML 入口自动解析、代码压缩（esbuild minify）、ESM/CJS 输出格式、Source Map 生成、public 目录复制。构建完成后自动生成可视化分析报告。
+
+（5）插件系统
+需要设计统一的插件接口（PluginOption），包含 configResolved、buildStart、transform、writeBundle、buildEnd 五个生命周期钩子，支持内置插件和用户自定义插件共享同一套 API。
+
+（6）项目脚手架功能
+需要提供交互式 CLI 工具，支持选择项目模板（vanilla-js-template、vue3-ts-template），自动复制模板文件并输出后续操作指引。
+
+（7）构建分析报告功能
+需要自动扫描构建产物目录，生成包含文件体积分析、分类统计、重复依赖检测、网络加载模拟、构建历史对比、优化建议的可视化 HTML 报告。支持独立 CLI 使用（lite-vite report）。
+
+（8）文档与演示
+工具链配套 VitePress 文档站（@lite-vite/docs），通过 Netlify 自动部署，涵盖使用指南、配置参考、插件开发、功能详解、项目架构、HMR 原理等完整文档。同时配套 Slidev 演示文稿（@lite-vite/ppt），用于技术分享和演讲场景。
+
+图3-2  系统功能结构图
+【图：展示工具链的功能模块分解——开发服务器（请求拦截/插件管道/静态服务/模块依赖图）、HMR（文件监听/WebSocket/BFS传播/链失活）、依赖预打包（esbuild/缓存）、生产构建（Rollup/压缩/报告）、插件系统、脚手架、构建分析、文档站】
+
+3.3  系统性能分析
+
+本工具链需要满足以下性能要求：
+
+（1）冷启动性能：开发服务器启动时间应控制在秒级，且与项目模块数量无关。这要求服务器启动时不做任何预编译或打包工作。
+
+（2）HMR 性能：文件修改后浏览器看到更新效果的延迟应控制在毫秒级（通常 < 100ms）。这要求更新传播算法高效，且只重新编译实际变化的模块。
+
+（3）构建性能：生产构建时间应显著短于同等规模项目使用 webpack 的构建时间。esbuild 的 TypeScript 转译和代码压缩速度比传统工具快 10-100 倍。
+
+（4）产物体积：通过 Rollup 的 tree-shaking 和 esbuild 的代码压缩，产物体积应小于 webpack 同等配置下的产物。
+
+（5）内存占用：模块依赖图采用"改了就删"的缓存失效策略，避免旧模块对象长期驻留内存导致内存泄漏。
+
+3.4  系统架构分析
+
+本工具链采用 pnpm Monorepo 架构，由以下 8 个包协作组成：
+
+表3-1  工具链包列表
+包名称	角色	描述
+lite-vite	核心层	核心构建工具，提供 dev 开发服务器和 build 生产构建
+create-lite-vite	脚手架层	项目脚手架 CLI，交互式创建项目
+@lite-vite/report	分析层	构建产物分析与可视化报告生成
+@lite-vite/shared	基础层	共享工具库（日志、文件操作、MIME 类型）
+@lite-vite/eslint-config	规范层	统一的 ESLint 代码规范预设
+@lite-vite/docs	文档层	VitePress 文档站点，Netlify 自动部署
+@lite-vite/ppt	演示层	Slidev 演示文稿
+playground	测试层	开发测试用的 playground 项目
+
+图3-3  Monorepo 架构图
+【图：展示 8 个包的层级关系——shared(基础层) → report(分析层) + lite-vite(核心层) + create-lite-vite(脚手架层)，eslint-config/docs/ppt 独立】
+
+包之间的依赖关系如下：@lite-vite/shared 作为基础层被 lite-vite、create-lite-vite、@lite-vite/report 三个包依赖；@lite-vite/report 被 lite-vite 依赖（build 完成后调用生成报告）；其余包相互独立。
+
+图3-4  包依赖关系图
+【图：箭头展示依赖方向——shared ← report ← lite-vite，shared ← create-lite-vite，lite-vite → 社区插件】
+
+构建顺序由依赖关系决定：
+1. @lite-vite/shared（无依赖，最先构建）
+2. @lite-vite/report（依赖 shared）
+3. lite-vite（依赖 shared + report）
+4. create-lite-vite（依赖 shared）
+
+3.5  系统流程分析
+
+3.5.1  开发模式流程
+
+开发模式（lite-vite dev）的完整流程如下：
+
+图3-5  开发模式流程图
+【图：CLI 入口 → 加载配置(options.ts) → 合并 CLI 参数 + 配置文件 → 初始化插件(configResolved) → 加载依赖缓存 → 创建 ModuleGraph → 启动 HTTP 服务器 → 启动 WebSocket HMR 服务 → 启动 chokidar 文件监听 → 服务器就绪】
+
+当浏览器请求一个模块时，开发服务器的处理流程为：
+
+图3-6  请求处理流程图
+【图：浏览器请求 → 判断是否为 HMR 客户端路径(/@vite/client) → 是则返回 HMR 脚本 → 否则解析文件路径 → 判断文件类型 → 按顺序调用插件 transform → 第一个返回非 null 的结果生效 → 返回响应(Content-Type + 代码)】
+
+3.5.2  构建模式流程
+
+生产构建（lite-vite build）的完整流程如下：
+
+图3-7  构建模式流程图
+【图：CLI 入口 → 加载配置 → 初始化插件(configResolved) → 触发 buildStart 钩子 → 清空输出目录 → 解析 HTML 入口提取 JS 入口 → 配置 Rollup 选项 → Rollup 打包(插件通过适配层参与) → 更新 HTML 脚本引用 → 复制 public/ 目录 → 触发 writeBundle 钩子 → 触发 buildEnd 钩子 → @lite-vite/report 生成构建分析报告】
+
+3.5.3  HMR 更新传播流程
+
+以依赖链 a.js → b.js → c.js（a 导入 b，b 导入 c）为例，当 c.js 发生变更时：
+
+图3-8  HMR 更新传播流程图
+【图：chokidar 检测 c.js 变更 → propagateUpdate: 从 c.js 出发 BFS 向上遍历 importers → 检查每个模块是否为自接受(isSelfAccepting) → 找到 HMR 边界(如 a.js 调用了 import.meta.hot.accept()) → 链失活: 清除 c→a 链上所有中间模块缓存 → WebSocket 发送 js-update 指令(携带边界模块路径) → 浏览器 import(a.js?t=timestamp) 重新加载 → 执行 accept 回调，局部更新】
+
+如果遍历到根模块仍未找到 HMR 边界，则发送 full-reload 指令触发全页面刷新。
+
+3.5.4  插件执行流程
+
+在构建模式下，插件的钩子调用时序如下：
+
+图3-9  插件钩子执行时序图
+【图：configResolved(所有插件) → buildStart(clean-dist: 输出开始提示) → Rollup 打包(transform 管道: vue-loader/ts-loader/css-loader/image-loader/txt-loader) → writeBundle → @lite-vite/report 生成报告 → buildEnd(clean-dist: 输出完成提示, start-report: 打开浏览器)】
+
+
+第4章  设计论述
+
+4.1  概要设计
+
+根据第三章的需求分析，本工具链的整体结构设计如图4-1所示。
+
+图4-1  系统结构图
+【图：展示 lite-vite 核心的内部模块结构——cli.ts(命令入口) → options.ts(配置加载) → server.ts(开发服务器)/build.ts(生产构建)，server.ts 关联 plugins/(6个内置插件) + moduleGraph.ts + hmr.ts + prebundle.ts + imports.ts + cache.ts，build.ts 关联 rollup.ts + @lite-vite/report】
+
+lite-vite 核心包的源码模块职责如下：
+
+表4-1  核心模块列表
+模块	职责
+cli.ts	CLI 命令注册（dev/build/report），解析参数
+options.ts	配置文件加载与 CLI 参数合并
+server.ts	HTTP 开发服务器，请求拦截与插件 transform 管道
+moduleGraph.ts	模块依赖图（双向链接、BFS 传播、缓存失效）
+hmr.ts	WebSocket HMR 服务，文件监听与更新推送
+prebundle.ts	esbuild 依赖预打包
+cache.ts	预打包结果缓存管理（metadata.json）
+imports.ts	导入路径重写（es-module-lexer + magic-string）
+build.ts	Rollup 生产构建流程
+rollup.ts	Rollup 选项配置与插件链
+sourcemap.ts	Source Map 生成
+plugins/	6 个内置插件（html/css/vue/js/ts/image-loader）
+client/hmr-client.ts	浏览器端 HMR 客户端脚本
+
+4.2  核心模块详细设计
+
+4.2.1  开发服务器 (server.ts)
+
+开发服务器是整个工具链的核心入口。它基于 Node.js 原生 HTTP 模块创建，启动时不做任何预编译工作，仅初始化模块依赖图和依赖缓存。
+
+核心设计思路：每个浏览器的 ESM import 请求都是一个 HTTP GET 请求，服务器拦截请求后按文件类型调用插件 transform 管道进行即时编译，然后将编译结果以正确的 Content-Type 返回给浏览器。
+
+关键代码如下：
+
+```typescript
+export async function startDevServer(ctx: ViteContext): Promise<ServerInstance> {
+  await loadDepCache();
+  const moduleGraph = new ModuleGraph();
+  const port = ctx.port || DEFAULT_PORT;
+  const staticServer = serve(PUBLIC_DIR, { dev: true, single: true });
+
+  const server = createServer(async (req, res) => {
+    const url = req.url || "/";
+
+    // HMR 客户端脚本请求
+    if (url === HMR_CLIENT_PATH) {
+      res.writeHead(200, { "Content-Type": "application/javascript" });
+      res.end(getHmrClientContent());
+      return;
+    }
+
+    // 解析文件路径
+    let filePath = url === "/" ? ctx.entry : resolve(ROOT, url.split("?")[0].slice(1));
+    const ext = extname(filePath).toLowerCase();
+
+    // 按顺序调用插件 transform
+    for (const plugin of ctx.plugins) {
+      if (plugin.transform) {
+        const result = await plugin.transform(content, filePath, options);
+        if (result) {
+          res.writeHead(200, { "Content-Type": result.mimeType });
+          res.end(result.code);
+          return;
+        }
+      }
+    }
+  });
+
+  // 启动 HMR 并共享模块依赖图
+  setupHmr(server, moduleGraph);
+  server.listen(port);
+}
+```
+
+服务器同时将 sirv 作为静态文件服务中间件，处理 public/ 目录下的静态资源请求。
+
+4.2.2  模块依赖图 (moduleGraph.ts)
+
+模块依赖图是 HMR 系统的核心数据结构。它是一个有向图，每个节点（ModuleNode）代表一个模块文件，边代表模块之间的导入关系。
+
+ModuleNode 的数据结构定义如下：
+
+```typescript
+export interface ModuleNode {
+  url: string;                        // 浏览器请求的 URL
+  file: string;                       // 文件系统绝对路径
+  code: string | null;                // 模块源代码
+  lastUpdated: number;                // 上次更新时间戳
+  importers: Set<ModuleNode>;         // 导入此模块的父模块集合
+  importedModules: Set<ModuleNode>;   // 此模块导入的子模块集合
+  isSelfAccepting?: boolean;          // 是否调用了 import.meta.hot.accept()
+  acceptedHmrDeps?: Set<string>;      // 接受更新的依赖列表
+}
+```
+
+ModuleGraph 类通过两个 Map 实现快速查找：urlToModuleMap（URL → 节点）和 fileToModuleMap（文件路径 → 节点）。核心方法 ensureEntryFromUrl 在创建或获取模块节点时自动过滤 node_modules 路径，避免将第三方依赖纳入 HMR 追踪范围。
+
+模块关系的建立通过 analyzeModuleImports 方法完成：使用 es-module-lexer 解析代码中的 import 语句，对每个相对路径导入建立双向链接（当前模块.importedModules.add(目标) + 目标.importers.add(当前模块)），同时检测代码中是否包含 import.meta.hot.accept 标记自接受模块。
+
+HMR 更新传播的核心算法 propagateUpdate 使用广度优先搜索（BFS）：
+
+```
+从变更模块出发
+  → 检查是否自接受 → 是则作为边界
+  → 否则遍历 importers，加入队列
+  → 找到自接受的 importer → 作为 HMR 边界，停止该分支
+  → 到达根模块仍无边界 → needFullReload = true
+```
+
+找到所有边界后，对变更模块到边界之间的模块链执行"链失活"——更新 lastUpdated 时间戳，清除缓存。这一步防止旧模块对象驻留内存导致泄漏。
+
+4.2.3  HMR 热更新 (hmr.ts)
+
+HMR 服务在开发服务器上层运行，负责文件监听和更新推送。
+
+初始化时创建 WebSocket 服务端，并使用 chokidar 监听项目根目录的文件变更（排除 node_modules 和 dist）：
+
+```typescript
+export function setupHmr(server: Server, moduleGraph?: ModuleGraph): WebSocketServer {
+  const graph = moduleGraph || new ModuleGraph();
+  const wss = new WebSocketServer({ server });
+
+  wss.on("connection", (ws) => {
+    ws.send(JSON.stringify({ type: "connected" }));
+  });
+
+  watch(ROOT, { ignored: ignoredHMRPath })
+    .on("change", (path) => handleFileChange(path))
+    .on("unlink", handleFileUnlink);
+
+  return wss;
+}
+```
+
+文件变更时，根据文件类型执行不同的更新策略：
+
+表4-2  文件类型与更新策略
+文件类型	服务端处理	客户端行为
+.html	发送 full-reload	location.reload() 全页刷新
+.css	发送 css-update	替换 <style> 元素内容
+.js/.ts	propagateUpdate 找边界，发送 js-update	import(url?t=timestamp) 重新加载
+.vue	发送 js-update	组件级重新渲染/重载
+其他	发送 full-reload	全页刷新
+
+HMR 客户端脚本（hmr-client.ts）在浏览器端运行，提供 HMRClient 类和 HMRContext 类。HMRClient 负责 WebSocket 连接管理和消息分发；HMRContext 为每个模块提供 import.meta.hot API（accept/dispose/prune/invalidate/on/off/send）。CSS 模块的样式注入通过 updateStyle/removeStyle 函数实现，使用 <style> 标签的 data-vite-style-id 属性进行精准定位。
+
+4.2.4  依赖预打包 (prebundle.ts + cache.ts)
+
+第三方 npm 依赖需要预打包的原因有二：大多数包以 CommonJS 格式发布，浏览器无法直接加载；某些包（如 lodash-es）有数百个子模块，逐一请求会造成 HTTP 瀑布流。
+
+预打包流程：
+
+```typescript
+export async function preBundleDependency(pkgName: string): Promise<string> {
+  if (depCache.has(pkgName)) return depCache.get(pkgName)!;
+
+  const pkgDir = resolvePackageDir(pkgName);
+  const outFile = join(CACHE_DIR, `${pkgName}.js`);
+
+  await esbuild.build({
+    entryPoints: [pkgName],
+    bundle: true,
+    outfile: outFile,
+    format: "esm",
+    platform: "browser",
+    define: {
+      __VUE_OPTIONS_API__: "true",
+      __VUE_PROD_DEVTOOLS__: "false",
+    },
+  });
+
+  depCache.set(pkgName, outFile);
+  await saveDepCache(); // 持久化到 metadata.json
+  return outFile;
+}
+```
+
+缓存机制：预打包结果存储在 node_modules/.lite-vite/ 目录下，metadata.json 记录包名到文件路径的映射。开发服务器启动时通过 loadDepCache() 恢复缓存，后续请求直接从缓存返回，避免重复预打包。
+
+4.2.5  导入路径重写 (imports.ts)
+
+浏览器原生 ESM 只能加载以 /、./、../ 开头的路径。对于裸模块导入（如 import { ref } from 'vue'）和省略扩展名的路径，需要进行重写。
+
+rewriteImports 函数使用 es-module-lexer 解析代码中的所有 import 语句位置，然后使用 magic-string 逐个替换：
+
+```typescript
+export async function rewriteImports(code: string, filePath: string): Promise<string> {
+  await init;
+  const [imports] = parse(code);
+  const ms = new MagicString(code);
+
+  for (const imp of imports) {
+    const importPath = imp.n;
+    if (importPath.startsWith(".") || importPath.startsWith("/")) {
+      // 相对/绝对路径：补全扩展名 + 规范化
+      rewrittenPath = await checkSuffix(resolvedPath) ?? importPath;
+    } else {
+      // 裸模块：查找预打包缓存或触发预打包
+      const cachedPath = depCache.get(pkgName) || await preBundleDependency(pkgName);
+      rewrittenPath = normalizeImportPath(relative(ROOT, cachedPath));
+    }
+    if (isStaticAsset || isCssFile) rewrittenPath += "?import";
+    ms.overwrite(start, end, rewrittenPath);
+  }
+  return ms.toString();
+}
+```
+
+三种重写场景：
+（1）裸模块 → 预打包路径：vue → /node_modules/.lite-vite/vue.js
+（2）省略扩展名 → 补全：./utils → /src/utils.ts
+（3）静态资源 → 添加 ?import 标记：./style.css → /src/style.css?import
+
+4.2.6  生产构建 (build.ts + rollup.ts)
+
+生产构建使用 Rollup 进行打包。build 函数的核心流程：
+
+```typescript
+export async function build(ctx: ViteContext): Promise<void> {
+  // 1. 触发 buildStart 钩子
+  for (const p of ctx.plugins) {
+    if (p.buildStart) await p.buildStart();
+  }
+
+  // 2. 解析 HTML 入口，提取 JS 入口文件
+  if (extname(entry) === ".html") {
+    input = await extractEntryFromHtml(entry);
+  }
+
+  // 3. 配置 Rollup 选项并打包
+  const rollupOptions = getRollupOptions({ hasTsConfig, input, minify, userPlugins });
+  const bundle = await rollup(rollupOptions);
+  await bundle.write(outputOptions);
+
+  // 4. 更新 HTML 中的脚本引用
+  await updateHtmlScript(htmlOutputPath, `./${entryChunk.fileName}`);
+
+  // 5. 复制 public/ 目录
+  await copyFiles(resolve(ROOT, "public"), outputDir);
+
+  // 6. 触发 writeBundle 和 buildEnd 钩子
+  // 7. 生成构建分析报告
+  await generateReport(outputDir, files, buildTimeMs, entry, format);
+}
+```
+
+Rollup 插件链配置（rollup.ts）包含：@rollup/plugin-node-resolve（解析 node_modules 依赖）、@rollup/plugin-replace（替换环境变量）、rollup-plugin-vue（Vue SFC 编译）、rollup-plugin-postcss（CSS 处理）、rollup-plugin-typescript2（TypeScript 编译，仅当 tsconfig.json 存在时）、@rollup/plugin-image（图片处理）、esbuild minify（代码压缩）。用户自定义插件通过 adaptUserPlugins 适配函数转换为 Rollup 插件参与构建。
+
+4.2.7  配置系统 (options.ts)
+
+配置系统支持四种配置文件格式（按加载优先级）：lite.config.ts（使用 esbuild 动态编译后 import）、lite.config.js（ESM）、lite.config.mjs（ESM）、lite.config.cjs（CommonJS）。
+
+配置合并策略：CLI 参数优先级高于配置文件。loadOptions 函数首先尝试加载配置文件，然后将配置文件中的选项与 CLI 参数合并，最终将内置插件和用户插件拼接为完整的插件列表：
+
+```typescript
+export const loadOptions = async (cliOptions): Promise<ViteContext> => {
+  const fileConfig = await loadConfigFile();
+  const merged = { ...cliOptions };
+
+  if (fileConfig) {
+    if (fileConfig.port && !cliOptions.port) merged.port = fileConfig.port;
+    // ... 其他选项合并
+  }
+
+  const userPlugins = fileConfig?.plugins || [];
+  const plugins = [...defaultPlugins, ...userPlugins];
+  return { ...merged, plugins };
+};
+```
+
+提供 defineLiteConfig 辅助函数为用户配置文件提供完整的 TypeScript 类型提示。
+
+UserConfig 类型定义涵盖了所有可配置选项：
+
+```typescript
+export interface UserConfig {
+  entry?: string;
+  port?: number;
+  plugins?: PluginOption[];
+  output?: string;
+  sourcemap?: boolean;
+  format?: "esm" | "cjs";
+  logLevel?: LogLevel;
+  clearScreen?: boolean;
+  server?: { port?: number; open?: boolean; host?: string; };
+  build?: { outdir?: string; minify?: boolean; sourcemap?: boolean;
+            format?: "esm" | "cjs"; rollupOptions?: RollupOptions;
+            lib?: { entry: string; name: string; fileName: string; }; };
+  resolve?: { alias?: Record<string, string>; extensions?: string[]; };
+  define?: Record<string, string>;
+}
+```
+
+4.3  内置插件设计
+
+Lite Vite 通过统一的 PluginOption 接口实现插件系统，所有内置插件和用户插件共享同一套 API：
+
+```typescript
+export interface PluginOption {
+  name: string;
+  configResolved?: (config: ViteContext) => void;
+  buildStart?: () => void | Promise<void>;
+  transform?: (content: string | Buffer, filePath: string,
+    options: { isModuleRequest: boolean; port: number; relativePath: string; }
+  ) => Promise<TransformResult | null>;
+  writeBundle?: () => void | Promise<void>;
+  buildEnd?: () => void | Promise<void>;
+}
+```
+
+6 个内置插件按以下顺序加载：
+
+4.3.1  html-loader
+
+处理 .html 文件，在 HTML 末尾注入 HMR 客户端脚本，建立浏览器与开发服务器之间的 WebSocket 连接：
+
+```typescript
+const code = `${content}\n${hmrClientScript(port)}`;
+return { code, mimeType: "text/html", map: null };
+```
+
+4.3.2  css-loader
+
+处理 .css 文件，根据请求类型返回不同内容。当 CSS 通过 JS 的 import 引入时（模块请求），将其转换为自接受的 JavaScript 模块：
+
+```typescript
+const code = `
+  import { updateStyle, removeStyle, createHotContext } from "/@vite/client";
+  import.meta.hot = createHotContext(${cssPath});
+  const id = ${cssId};
+  const css = ${cssContent};
+  updateStyle(id, css, modulePath);
+  import.meta.hot.accept();
+  import.meta.hot.prune(() => { removeStyle(id); });
+  export default css;
+`;
+```
+
+当浏览器直接请求 CSS 文件时（如 <link> 标签），原样返回 CSS 内容。
+
+4.3.3  vue-loader
+
+处理 .vue 文件，使用 @vue/compiler-sfc 完成完整的 SFC 编译：
+
+```typescript
+const { descriptor } = parse(content, { filename: filePath, sourceMap: true });
+const scopeId = `data-v-${id}`;
+
+// 编译 script
+const script = compileScript(descriptor, { id: scopeId, sourceMap: true });
+codeList.push(rewriteDefault(scriptContent, "__sfc_main__"));
+
+// 编译 template
+const template = compileTemplate({ source: descriptor.template.content, id: scopeId });
+codeList.push(template.code, `__sfc_main__.render=render;`);
+
+// 编译 style（支持 scoped）
+for (const styleBlock of descriptor.styles) {
+  const styleCode = compileStyle({ source: styleBlock.content, scoped: styleBlock.scoped });
+  codeList.push(`var el=document.createElement('style');el.innerHTML=\`${styleCode.code}\`;document.body.append(el);`);
+}
+```
+
+4.3.4  ts-loader
+
+处理 .ts/.tsx 文件，使用 esbuild 进行即时转译（不做类型检查），然后重写导入路径：
+
+```typescript
+const result = await esbuild.transform(content, {
+  loader: /\.tsx?$/.test(filePath) ? "ts" : "jsx",
+  target: "esnext", format: "esm", sourcemap: "inline",
+});
+code = await rewriteImports(result.code, filePath);
+```
+
+4.3.5  js-loader
+
+处理 .js/.mjs/.jsx 文件，调用 rewriteImports 重写导入路径：
+
+```typescript
+const codeWithImports = await rewriteImports(content, filePath);
+return { code: codeWithImports, mimeType: "application/javascript", map: null };
+```
+
+4.3.6  image-loader
+
+处理图片文件（.png/.jpg/.svg），区分模块请求和直接请求：
+- SVG 模块请求：编码为 data URI 内联到代码中
+- 其他图片模块请求：返回文件路径（export default "/src/logo.png"）
+- 直接请求：返回原始图片数据
+
+4.4  工具链配套包设计
+
+4.4.1  @lite-vite/report — 构建分析报告
+
+@lite-vite/report 是独立的构建产物分析工具，既可作为 lite-vite 的内部库调用（build 完成后自动生成报告），也可作为独立 CLI 使用（lite-vite report 或 npx lite-report）。
+
+核心功能包括：
+（1）目录扫描（analyze.ts）：递归扫描构建产物目录，收集所有文件的名称、大小、类型（chunk/asset）信息。
+（2）重复依赖检测（data.ts）：通过正则表达式匹配 node_modules 路径，检测同一 npm 包被多个 chunk 重复打包的情况，计算浪费体积并按降序排列。
+（3）优化建议生成（data.ts）：基于规则引擎分析构建结果，自动给出优化建议（JS > 500KB 建议代码分割、存在 sourcemap 提醒安全风险、大图片建议 WebP 格式等）。
+（4）构建历史管理（data.ts）：将每次构建的关键指标（体积、文件数、时间）保存到 .lite-vite/build-history.json，支持与历史构建的 diff 对比。
+（5）HTML 可视化报告（html.ts）：生成包含体积饼图、文件清单表、模块分析、网络加载模拟、构建历史趋势等的交互式 HTML 报告。
+
+图4-2  构建分析报告界面
+【图：截图——构建报告 HTML 页面，展示总览面板、体积分类饼图、文件清单表、优化建议等】
+
+4.4.2  create-lite-vite — 项目脚手架
+
+create-lite-vite 提供交互式 CLI，通过 prompts 库实现用户交互：
+
+```typescript
+const result = await prompts([
+  { type: "text", name: "projectName", message: "请输入项目名称:" },
+  { type: "select", name: "projectSelect", message: "请选择项目类型:",
+    choices: [
+      { title: "vanilla-js-template", value: "vite-js-template" },
+      { title: "vue3-ts-template", value: "ts-vue-template" },
+    ]},
+]);
+await cloneTemplateTo(repoName, targetPath);
+```
+
+内置两个项目模板：vanilla-js-template（纯 JavaScript，包含 CSS、图片资源处理示例）和 vue3-ts-template（Vue 3 + TypeScript，包含 tsconfig、vue-tsc 配置）。模板文件在 tsup 构建时通过 esbuild 插件自动复制到 dist/ 目录，随 npm 包一同发布。
+
+4.4.3  @lite-vite/shared — 共享工具库
+
+提供所有包复用的工具函数：
+（1）日志系统（logger.ts）：基于 picocolors 的分级日志，支持 debug/info/warn/error 四个等级，开发环境默认 debug 级别，生产环境默认 warn 级别。
+（2）文件操作（file.ts）：fileExists（异步检查文件存在性）、copyFiles（递归复制目录）、hasFolder（检查目录存在性）、normalizeImportPath（路径规范化）。
+（3）MIME 类型（mime.ts）：MIME_TYPES 映射表、getMimeType 查询函数、文件扩展名分类常量（TEXT_EXTENSIONS、BINARY_EXTENSIONS 等）。
+
+4.4.4  @lite-vite/docs — VitePress 文档站
+
+文档站使用 VitePress 构建，通过 Netlify 自动部署。涵盖以下章节：使用指南（项目介绍、快速开始、功能总览、项目架构）、功能详解（HMR、依赖预打包、CSS 处理、静态资源、TypeScript、Vue SFC、构建报告、Source Map）、配置参考、CLI 命令、插件开发（机制与 API、钩子详解、编写自定义插件）、项目模板、进阶原理（HMR 完整原理、vite-plugin-vue 原理、导入路径重写机制）。
+
+图4-3  文档站点界面
+【图：截图——VitePress 文档站首页或某个子页面，展示 sidebar 导航和文档内容】
+
+4.4.5  @lite-vite/ppt — Slidev 演示文稿
+
+使用 Slidev 制作的技术演讲幻灯片，包含 18 张幻灯片，涵盖：传统构建工具困境、Lite Vite 工作方式对比、核心优势展示、与 webpack 全方位对比表、与现代工具差异化分析、工具链全景、Monorepo 架构图、开发服务器架构、HMR 更新链路、HMR 边界查找图、插件系统 magic-move 代码动画、插件执行流程图、构建分析报告、Vue SFC 支持与 HMR 判定表、快速上手指南等。
+
+4.5  用户自定义插件示例
+
+工具链支持用户以独立 npm 包的形式发布和复用插件。目前已有三个社区插件：
+
+4.5.1  lite-vite-plugin-clean-dist
+
+构建生命周期日志插件，使用 buildStart 和 buildEnd 钩子在构建开始和结束时输出提示信息。
+
+4.5.2  lite-vite-plugin-txt-loader
+
+文本文件加载器插件，使用 transform 钩子拦截 .txt 文件请求，将文本内容转为 ES 模块导出：
+
+```typescript
+async transform(content, filePath) {
+  if (!filePath.endsWith(".txt")) return null;
+  return {
+    code: `export default ${JSON.stringify(content.trim())};`,
+    mimeType: "application/javascript",
+    map: null,
+  };
+}
+```
+
+4.5.3  lite-vite-plugin-start-report
+
+构建完成后自动打开浏览器查看报告的插件，使用 buildEnd 钩子延迟检测报告文件并调用系统命令打开浏览器。由于构建报告在所有 buildEnd 钩子执行之后才写入磁盘，插件通过轮询机制等待文件就绪。
+
+插件在配置文件中注册：
+
+```typescript
+// lite.config.ts
+import cleanDist from "lite-vite-plugin-clean-dist";
+import txtLoader from "lite-vite-plugin-txt-loader";
+import startReport from "lite-vite-plugin-start-report";
+
+export default {
+  plugins: [cleanDist, txtLoader, startReport],
+};
+```
+
+
+第5章  系统测试
+
+5.1  单元测试（白盒测试）
+
+5.1.1  测试框架与配置
+
+本项目使用 Vitest 作为单元测试框架[17]，配合 @vitest/coverage-v8 实现代码覆盖率收集，@vitest/ui 提供可视化测试界面。测试配置文件位于项目根目录 vitest.config.ts：
+
+```typescript
+export default defineConfig({
+  test: {
+    include: ["packages/*/tests/**/*.test.ts"],
+    globals: true,
+    coverage: {
+      provider: "v8",
+      include: ["packages/shared/**/*.ts", "packages/report/src/**/*.ts",
+                "packages/lite-vite/src/**/*.ts"],
+      reporter: ["text", "html", "lcov"],
+    },
+  },
+});
+```
+
+共编写 6 个测试文件，覆盖三个核心包（shared、report、lite-vite）的 110+ 个测试用例。
+
+5.1.2  shared 包测试
+
+针对共享工具库的纯函数和文件操作进行测试：
+
+表5-1  shared 包测试用例
+测试模块	测试函数	测试点	用例数
+类型守卫	isObject	null/undefined/对象/数组/Date/原始类型	10
+类型守卫	isFunction	函数/async函数/class/非函数值	8
+路径工具	normalizeImportPath	反斜杠转换/前导斜杠/嵌套路径/点段	5
+MIME 类型	getMimeType	所有已知扩展名 + 未知扩展名 fallback	13
+常量	MIME_TYPES 等	数组/映射表完整性断言	5
+文件操作	fileExists	存在的文件/不存在的文件	2
+文件操作	hasFolder	存在的目录/不存在的路径/文件（非目录）	3
+文件操作	copyFiles	递归复制文件和子目录	1
+日志	log	debug/info/warn/error 输出到正确的 console 方法	5
+
+文件操作测试使用 Node.js 的 tmpdir() 创建临时目录，afterEach 中自动清理。日志测试使用 vi.spyOn 监听 console.log/warn/error 调用。
+
+5.1.3  report 包测试
+
+针对构建分析的纯数据处理函数进行全面测试：
+
+表5-2  report 包测试用例
+测试模块	测试函数	测试点	用例数
+工具函数	formatBytes	0/字节/KB/MB/GB 各级别格式化	5
+工具函数	gzipEstimate	35% 估算准确性	3
+工具函数	brotliEstimate	25% 估算准确性	3
+工具函数	getFileCategory	JS/CSS/图片/SVG/字体/HTML/Sourcemap/JSON/未知	10
+常量	CATEGORY_COLORS	所有分类都有合法的十六进制颜色值	1
+重复检测	detectDuplicates	无模块/无重复/跨chunk重复/scoped包/排序	5
+建议生成	generateSuggestions	正常/大JS/单chunk/无CSS/有sourcemap/有重复/大体积/大图片	8
+差异计算	computeDiff	null记录/新增/删除/变更/未变化/排序	6
+数据聚合	collectReportData	体积统计/模块统计/sourcemap检测/历史diff	2
+历史管理	loadHistory	无文件返回空/读取已有历史	2
+历史管理	saveHistory	保存到文件并验证内容	1
+
+5.1.4  lite-vite 包测试
+
+针对核心构建工具的关键模块进行测试：
+
+表5-3  lite-vite 包测试用例
+测试模块	测试函数	测试点	用例数
+ModuleGraph	ensureEntryFromUrl	创建新节点/复用已有/URL更新/文件更新/node_modules过滤/反斜杠规范化	6
+ModuleGraph	getModuleByFile/Url	存在/不存在的查找	4
+ModuleGraph	deleteModule	删除映射/清理双向关系/不存在的模块	3
+ModuleGraph	invalidateModules	时间戳更新	1
+ModuleGraph	getEntireFileMap	返回内部Map	1
+ModuleGraph	formatModuleForDebug	格式化单个/带关系的模块	2
+ModuleGraph	formatModuleSetForDebug	格式化集合/空集合	2
+ModuleGraph	updateModuleCode	更新代码/创建不存在的模块/清理旧关系/检测自接受/分析import关系/跳过外部模块	6
+ModuleGraph	复杂图操作	共享依赖删除/链式失活	2
+配置	defineLiteConfig	身份函数/空配置/复杂配置	3
+配置	defineConfig	是 defineLiteConfig 的别名	1
+插件列表	defaultPlugins	包含6个插件/都有name/正确顺序/transform函数存在	4
+
+5.1.5  测试结果与覆盖率
+
+运行 pnpm test 命令，所有 110+ 个测试用例全部通过：
+
+图5-1  Vitest 测试运行结果
+【图：截图——终端中 vitest run 的输出，显示 6 个测试文件全部通过、110+ 个测试全部 passed】
+
+运行 pnpm test:coverage 命令生成覆盖率报告：
+
+图5-2  代码覆盖率报告
+【图：截图——coverage/index.html 页面或终端中的覆盖率表格，展示各文件的 Stmts/Branch/Funcs/Lines 覆盖率】
+
+核心纯函数模块（shared/index.ts、shared/mime.ts、report/src/utils.ts、report/src/data.ts）覆盖率达到 86%-100%。运行时模块（server.ts、hmr.ts、build.ts 等）由于依赖文件系统和网络环境，不适合纯单元测试，通过黑盒功能测试覆盖。
+
+5.2  功能测试（黑盒测试）
+
+5.2.1  脚手架创建项目测试
+
+表5-4  脚手架测试用例
+测试模块	脚手架创建项目
+测试目的	验证 pnpm create lite-vite 能正确创建项目
+测试方法	黑盒测试
+测试数据	1. 执行 pnpm create lite-vite，输入项目名 "test-app"，选择 vanilla-js-template
+2. 执行 pnpm create lite-vite，输入项目名 "test-vue"，选择 vue3-ts-template
+测试结果	1. 成功创建项目，目录结构包含 index.html、src/main.js、package.json、public/
+2. 成功创建项目，目录结构包含 index.html、src/main.ts、src/App.vue、tsconfig.json
+结论	脚手架工具能正确创建两种模板的项目
+
+5.2.2  开发服务器启动测试
+
+表5-5  开发服务器测试用例
+测试模块	开发服务器
+测试目的	验证 lite-vite dev 能正确启动并返回页面
+测试方法	黑盒测试
+测试数据	1. 在 vanilla-js-template 项目中执行 lite-vite dev -p 4000
+2. 浏览器访问 http://localhost:4000
+3. 检查网络请求中的模块加载
+测试结果	1. 服务器在秒级启动，控制台输出 "Server running at http://localhost:4000"
+2. 页面正常显示，HTML 中包含注入的 HMR 客户端脚本
+3. 浏览器 Network 面板显示 main.js、style.css?import、vue 预打包文件等模块请求
+结论	开发服务器能正常启动，按需编译工作正常
+
+5.2.3  HMR 热更新测试
+
+表5-6  HMR 测试用例
+测试模块	热模块替换
+测试目的	验证不同文件类型的热更新行为
+测试方法	黑盒测试
+测试数据	1. 修改 src/style.css 中的颜色值
+2. 修改 src/main.js 中的字符串常量
+3. 修改 index.html 的标题
+测试结果	1. CSS 热更新：页面样式即时变化，无刷新，控制台输出 "[vite-hmr] Updating style"
+2. JS 更新：页面刷新（因无 HMR 边界），控制台输出更新日志
+3. HTML 变更：全页面刷新，控制台输出 "[vite-hmr] Executing full reload"
+结论	不同文件类型按预期执行不同的更新策略
+
+5.2.4  生产构建测试
+
+表5-7  生产构建测试用例
+测试模块	生产构建
+测试目的	验证 lite-vite build 能正确生成产物
+测试方法	黑盒测试
+测试数据	1. 在 vanilla-js-template 中执行 lite-vite build
+2. 在 ts-vue-template 中执行 lite-vite build
+测试结果	1. 构建成功，dist/ 包含 index.html、main.js、build-report.html，控制台输出 "✓ Built in 0.60s"
+2. 构建成功，dist/ 包含 index.html、main.js，TypeScript 编译正常
+结论	生产构建功能正常，产物结构正确
+
+5.2.5  构建报告测试
+
+表5-8  构建报告测试用例
+测试模块	构建分析报告
+测试目的	验证 lite-vite report 能正确生成报告
+测试方法	黑盒测试
+测试数据	1. 在已构建的项目中执行 lite-vite report --no-open
+2. 在浏览器中打开 dist/build-report.html
+测试结果	1. 控制台输出 "扫描到 4 个文件" 和 "📊 构建报告: dist/build-report.html"
+2. 报告页面正常显示，包含总览面板、文件清单、优化建议等内容
+结论	构建报告功能正常，可视化展示正确
+
+图5-3  构建报告界面展示
+【图：截图——构建报告 HTML 页面的完整展示】
+
+5.2.6  自定义插件测试
+
+表5-9  自定义插件测试用例
+测试模块	自定义插件（clean-dist / txt-loader / start-report）
+测试目的	验证用户自定义插件在构建流程中正确执行
+测试方法	黑盒测试
+测试数据	在 lite.config.ts 中注册三个插件，执行 lite-vite build
+测试结果	控制台依次输出：
+1. "[clean-dist] 🧹 构建开始，dist 目录将被清理"（buildStart）
+2. 构建过程正常完成
+3. "[clean-dist] ✅ 构建完成"（buildEnd）
+4. "[start-report] 📊 正在打开构建报告..."（buildEnd，延迟检测）
+5. 浏览器自动打开 build-report.html
+结论	三个自定义插件均按预期在正确的钩子时机执行
+
+
+结    论
+
+本文设计并实现了一套名为 Lite Vite 的现代前端构建工具链，采用 pnpm Monorepo 架构组织 8 个包，涵盖从项目创建到构建分析的完整开发流程。
+
+核心成果如下：
+
+（1）实现了基于原生 ESM 的开发服务器，通过按需编译机制实现秒级冷启动，启动速度与项目大小无关，从根本上解决了 webpack 等传统工具的冷启动性能问题。
+
+（2）实现了基于模块依赖图和 BFS 传播算法的精准 HMR 机制，支持 CSS 无刷新样式替换、JS/TS 模块级更新、Vue 组件热更新，通过"链失活"机制防止内存泄漏。
+
+（3）实现了基于 esbuild 的依赖预打包与缓存机制，自动将 CommonJS 依赖转为 ESM 格式，预打包速度比 webpack 的 DLL Plugin 方案快 10-100 倍。
+
+（4）实现了基于 Rollup 的生产构建，天然支持 tree-shaking，产物不包含模块运行时代码，体积显著优于 webpack 产物。
+
+（5）实现了统一的插件系统，6 个内置插件覆盖 HTML/CSS/JS/TS/Vue/图片文件类型，3 个社区插件展示了插件的扩展能力。
+
+（6）实现了完整的工具链配套：项目脚手架（create-lite-vite）、构建分析报告（@lite-vite/report，含独立 CLI）、共享工具库（@lite-vite/shared）、ESLint 预设（@lite-vite/eslint-config）、VitePress 文档站（@lite-vite/docs）、Slidev 演示文稿（@lite-vite/ppt）。
+
+（7）编写了全面的自动化测试，6 个测试文件、110+ 个测试用例全部通过，核心纯函数模块覆盖率达 86%-100%。
+
+目前系统尚存在以下不足，有待后续改进：
+
+（1）Vue 组件的 HMR 目前采用全页刷新策略，尚未实现基于 descriptor 对比的 rerender/reload 精细化判定。
+（2）尚未支持 CSS 预处理器（Sass/Less/Stylus）的开发阶段即时编译。
+（3）尚未实现基于文件副作用分析的 HMR 更新策略优化。
+（4）性能 benchmark 数据有待系统化采集和对比。
+
+后续将持续优化上述不足，并考虑发布到 npm 供社区使用。
+
+
+致    谢
+
+在论文即将结束之际，我要向所有给予我帮助和支持的人表达衷心的感谢。
+
+首先感谢我的指导老师，在整个毕业设计期间给予了悉心的指导和严格的要求。从选题方向的确定、技术方案的论证、到论文的撰写和修改，老师都给出了宝贵的建议和耐心的指导，使我能够顺利完成本次毕业设计。
+
+感谢在大学期间教授我计算机专业知识的所有老师，正是这些课程的积累为本项目的开发打下了坚实的基础。特别是软件工程、编译原理、计算机网络等课程的知识，在本项目的架构设计、模块编译、网络通信等方面发挥了重要作用。
+
+感谢开源社区的贡献者们。本项目依赖的 Node.js、esbuild、Rollup、TypeScript、pnpm、Vue、VitePress、Slidev 等开源技术，凝聚了全球开发者的智慧和努力。
+
+感谢我的家人和朋友，在我遇到困难时给予的鼓励和支持。
+
+最后，再次向指导老师表示最诚挚的感谢，也希望老师对论文中存在的不足之处多多指正。
+
+
+参考文献
+
+[1] webpack. webpack documentation[EB/OL]. https://webpack.js.org/, 2024.
+[2] 张鑫旭. 前端工程化实践指南[M]. 北京: 电子工业出版社, 2022: 45-67.
+[3] TC39. ECMAScript 2015 Language Specification — Modules[S]. ECMA International, 2015.
+[4] Evan Wallace. esbuild — An extremely fast bundler for the web[EB/OL]. https://esbuild.github.io/, 2024.
+[5] Rich Harris. Rollup — The JavaScript module bundler[EB/OL]. https://rollupjs.org/, 2024.
+[6] Addy Osmani. Developing Backbone.js Applications[M]. O'Reilly Media, 2013.
+[7] Devon Govett. Parcel — The zero configuration build tool[EB/OL]. https://parceljs.org/, 2024.
+[8] Donny (강동윤). SWC — Rust-based platform for the Web[EB/OL]. https://swc.rs/, 2024.
+[9] Tobias Koppers. Turbopack — Incremental bundler and build system[EB/OL]. https://turbo.build/pack, 2024.
+[10] 刘博文. 深入浅出 Webpack[M]. 北京: 电子工业出版社, 2018: 120-145.
+[11] Ryan Dahl. Node.js[EB/OL]. https://nodejs.org/, 2024.
+[12] I. Fette, A. Melnikov. The WebSocket Protocol[S]. RFC 6455, IETF, 2011.
+[13] Evan You. Vue.js — The Progressive JavaScript Framework[EB/OL]. https://vuejs.org/, 2024.
+[14] Guy Bedford. es-module-lexer — Low-overhead lexer for ES modules[EB/OL]. https://github.com/nicolo-ribaudo/es-module-lexer, 2024.
+[15] Rich Harris. magic-string — Manipulate strings like a wizard[EB/OL]. https://github.com/rich-harris/magic-string, 2024.
+[16] pnpm. pnpm — Fast, disk space efficient package manager[EB/OL]. https://pnpm.io/, 2024.
+[17] Anthony Fu. Vitest — Blazing Fast Unit Test Framework[EB/OL]. https://vitest.dev/, 2024.
+[18] Anthony Fu. VitePress — Static Site Generator powered by Vite[EB/OL]. https://vitepress.dev/, 2024.
+[19] Anthony Fu. Slidev — Presentation Slides for Developers[EB/OL]. https://sli.dev/, 2024.
+[20] 阮一峰. ES6 标准入门[M]. 北京: 电子工业出版社, 2017: 278-312.
