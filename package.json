@@ -9,6 +9,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "docs:build": "cd packages/docs && pnpm run build",
     "build": "cd packages/shared && pnpm run build && cd ../report && pnpm run build && cd ../lite-vite && pnpm run build && cd ../create-vite && pnpm run build",
     "deploy:test": "pnpm i --force && pnpm run build && DEST=/Users/jiajunefeng/lite-vite-test && rm -rf $DEST/vite-js-template/node_modules/.pnpm/lite-vite@2.0.1_postcss@8.5.9_rollup@4.60.1/node_modules/lite-vite/dist $DEST/ts-vue-template/node_modules/.pnpm/lite-vite@2.0.1_postcss@8.5.9_rollup@4.60.1/node_modules/lite-vite/dist && cp -r packages/lite-vite/dist $DEST/vite-js-template/node_modules/.pnpm/lite-vite@2.0.1_postcss@8.5.9_rollup@4.60.1/node_modules/lite-vite/dist && cp -r packages/lite-vite/dist $DEST/ts-vue-template/node_modules/.pnpm/lite-vite@2.0.1_postcss@8.5.9_rollup@4.60.1/node_modules/lite-vite/dist && rm -rf $DEST/vite-js-template/node_modules/.lite-vite $DEST/ts-vue-template/node_modules/.lite-vite && echo 'Deploy done'"
   },

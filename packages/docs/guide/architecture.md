@@ -259,6 +259,141 @@ lite-vite dev ────────────────┘
 @lite-vite/shared (日志、文件操作、MIME)
 ```
 
+## 插件生态
+
+Lite Vite 的插件系统支持用户以**独立 npm 包**的形式发布和复用插件。以下是目前已有的三个社区插件：
+
+### lite-vite-plugin-clean-dist
+
+**功能**：构建生命周期日志插件，在构建开始和结束时输出提示。
+
+```ts
+export default {
+  name: "clean-dist",
+  buildStart() {
+    console.log("[clean-dist] 🧹 构建开始，dist 目录将被清理");
+  },
+  buildEnd() {
+    console.log("[clean-dist] ✅ 构建完成");
+  },
+};
+```
+
+**使用的钩子**：`buildStart` + `buildEnd`
+
+---
+
+### lite-vite-plugin-txt-loader
+
+**功能**：自定义文件类型加载器，支持在 JS 中 `import` 导入 `.txt` 文件，将文本内容转为 ES 模块导出。
+
+```ts
+export default {
+  name: "txt-loader",
+  async transform(content, filePath) {
+    if (!filePath.endsWith(".txt") || typeof content !== "string") return null;
+    const escaped = JSON.stringify(content.trim());
+    return {
+      code: `export default ${escaped};`,
+      mimeType: "application/javascript",
+      map: null,
+    };
+  },
+};
+```
+
+**使用的钩子**：`transform` —— 拦截 `.txt` 文件请求，返回 JS 模块
+
+使用后可以这样导入文本文件：
+
+```ts
+import readme from './README.txt'
+console.log(readme) // 文本内容字符串
+```
+
+---
+
+### lite-vite-plugin-start-report
+
+**功能**：构建完成后自动打开浏览器查看可视化构建报告。
+
+```ts
+import { exec } from "node:child_process";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+
+export default {
+  name: "start-report",
+  buildEnd() {
+    const reportPath = join(process.cwd(), "dist", "build-report.html");
+
+    // 报告在 buildEnd 之后才写入磁盘，延迟轮询等待文件就绪
+    const maxRetries = 10;
+    const interval = 500;
+    let retries = 0;
+
+    const tryOpen = () => {
+      if (existsSync(reportPath)) {
+        console.log("[start-report] 📊 正在打开构建报告...");
+        const cmd = process.platform === "darwin" ? "open"
+          : process.platform === "win32" ? "start" : "xdg-open";
+        exec(`${cmd} ${reportPath}`);
+      } else if (retries < maxRetries) {
+        retries++;
+        setTimeout(tryOpen, interval);
+      } else {
+        console.log("[start-report] ⚠️ 未找到构建报告");
+      }
+    };
+
+    setTimeout(tryOpen, interval);
+  },
+};
+```
+
+**使用的钩子**：`buildEnd` —— 构建完成后延迟检测报告文件并打开浏览器
+
+**设计细节**：构建报告是在所有 `buildEnd` 钩子执行之后才写入磁盘的，所以插件通过轮询等待文件就绪，最多等待 5 秒（10 次 × 500ms）。
+
+---
+
+### 插件使用方式
+
+插件以独立包的形式构建（tsup），通过相对路径或 npm 包名引入：
+
+```ts
+// lite.config.ts
+import cleanDist from "lite-vite-plugin-clean-dist";
+import txtLoader from "lite-vite-plugin-txt-loader";
+import startReport from "lite-vite-plugin-start-report";
+
+export default {
+  plugins: [cleanDist, txtLoader, startReport],
+};
+```
+
+### 插件与核心的协作关系
+
+```
+lite.config.ts
+  │
+  │ 注册插件
+  ▼
+lite-vite (核心)
+  │
+  ├─ configResolved ──→ 通知所有插件配置已就绪
+  │
+  ├─ dev 模式
+  │   └─ transform ──→ txt-loader 拦截 .txt 请求
+  │
+  └─ build 模式
+      ├─ buildStart ──→ clean-dist 输出开始提示
+      ├─ Rollup 打包 ──→ txt-loader 通过适配层参与构建
+      ├─ 生成构建报告 ──→ @lite-vite/report
+      ├─ buildEnd ──→ clean-dist 输出完成提示
+      └─ buildEnd ──→ start-report 打开浏览器查看报告
+```
+
 ## pnpm Workspace 配置
 
 ```yaml
