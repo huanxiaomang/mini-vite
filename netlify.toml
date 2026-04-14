@@ -1,5 +1,5 @@
 [build]
-publish = "docs/.vitepress/dist"
+publish = "packages/docs/.vitepress/dist"
 command = "pnpm run docs:build"
 
 [build.environment]
